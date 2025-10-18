@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  gemini-claude-proxy:
+    build: .
+    container_name: gemini-claude-proxy
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - GEMINI_API_URL=${GEMINI_API_URL:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME:-gemini-1.5-pro-latest}
+      - NODE_ENV=production
+    restart: unless-stopped

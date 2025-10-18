@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini-Claude Proxy Configuration</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Login Card -->
+    <div id="loginCard" class="card">
+      <h1>Gemini-Claude Proxy</h1>
+      <p class="subtitle">Admin Login</p>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" required>
+        </div>
+        <div id="loginError" class="error-message"></div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+    </div>
+
+    <!-- Configuration Card -->
+    <div id="configCard" class="card" style="display: none;">
+      <div class="card-header">
+        <h1>Configuration</h1>
+        <div class="header-controls">
+          <div class="status-indicator">
+            <span id="statusDot" class="status-dot"></span>
+            <span id="statusText">Not tested</span>
+          </div>
+          <button id="themeToggle" class="btn-icon" title="Toggle theme">
+            <span class="theme-icon">🌙</span>
+          </button>
+          <button id="logoutBtn" class="btn-icon" title="Logout">
+            <span>🚪</span>
+          </button>
+        </div>
+      </div>
+
+      <form id="configForm">
+        <div class="form-section">
+          <h3>Gemini API Settings</h3>
+          
+          <div class="form-group">
+            <label for="geminiApiUrl">API URL</label>
+            <input type="url" id="geminiApiUrl" placeholder="https://example.com/v1beta" required>
+          </div>
+
+          <div class="form-group">
+            <label for="geminiApiKey">API Key</label>
+            <input type="password" id="geminiApiKey" placeholder="Enter your Gemini API key" required>
+          </div>
+
+          <div class="form-group">
+            <label for="geminiModelName">Model Name</label>
+            <input type="text" id="geminiModelName" placeholder="gemini-1.5-pro-latest" required>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3>Local API Key</h3>
+          <div class="form-group">
+            <label for="localApiKey">API Key (for downstream clients)</label>
+            <div class="input-with-button">
+              <input type="text" id="localApiKey" readonly>
+              <button type="button" id="copyKeyBtn" class="btn btn-secondary">Copy</button>
+              <button type="button" id="generateKeyBtn" class="btn btn-secondary">Generate New</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3>Change Password</h3>
+          <div class="form-group">
+            <label for="currentPassword">Current Password</label>
+            <input type="password" id="currentPassword">
+          </div>
+          <div class="form-group">
+            <label for="newPassword">New Password</label>
+            <input type="password" id="newPassword">
+          </div>
+          <button type="button" id="changePasswordBtn" class="btn btn-secondary">Change Password</button>
+        </div>
+
+        <div id="configError" class="error-message"></div>
+        <div id="configSuccess" class="success-message"></div>
+        
+        <button type="submit" class="btn btn-primary">Save Configuration</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
