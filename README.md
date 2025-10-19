@@ -1,6 +1,7 @@
 # Gemini to Claude API Proxy
 
 将 Gemini API 转换为 Claude API 格式的代理服务，支持 Claude Code、Claude code VS Plugin 等客户端。
+本项目特别适合与Gemini-balance搭配工作，将白嫖进行到底！
 
 ## ✨ 特性
 
