@@ -13,6 +13,8 @@
 
 ## 🚀 快速开始
 
+> 💡 **慢速网络？** 查看 [部署指南](DEPLOYMENT.md) 了解国内镜像加速方案
+
 ### 使用 Docker Compose（推荐）
 
 1. 克隆项目
@@ -24,6 +26,20 @@ cd gemini-claude
 2. 启动服务
 ```bash
 docker-compose up -d
+```
+
+**慢速网络环境**：如果构建很慢，可以：
+
+```bash
+# 方法 1: 使用代理
+export HTTP_PROXY=http://your-proxy:port
+export HTTPS_PROXY=http://your-proxy:port
+docker-compose build --no-cache
+
+# 方法 2: 使用国内镜像
+# 编辑 Dockerfile，取消注释以下两行：
+# RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+# RUN npm config set registry https://registry.npmmirror.com
 ```
 
 3. 访问管理界面并配置

@@ -1,7 +1,13 @@
 
 services:
   gemini-claude-proxy:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # 适应慢速网络环境
+      args:
+        - HTTP_PROXY=${HTTP_PROXY:-}
+        - HTTPS_PROXY=${HTTPS_PROXY:-}
     container_name: gemini-claude-proxy
     ports:
       - "9000:9000"
@@ -9,6 +15,7 @@ services:
       # 持久化配置数据
       - ./data:/app/data
     restart: unless-stopped
+    # 健康检查配置
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
       interval: 30s
@@ -21,3 +28,11 @@ services:
 # 2. 访问：http://localhost:9000
 # 3. 使用默认密码 admin123 登录
 # 4. 在配置页面设置你的 Gemini API Key 和其他参数
+
+# 慢速网络环境：
+# 如果构建很慢，可以设置代理：
+# export HTTP_PROXY=http://your-proxy:port
+# export HTTPS_PROXY=http://your-proxy:port
+# docker-compose build --no-cache
+# 
+# 或者使用国内镜像（在 Dockerfile 中配置）

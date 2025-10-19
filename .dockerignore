@@ -1,10 +1,44 @@
-node_modules
-npm-debug.log
-data/
+# Git
 .git
 .gitignore
-README.md
-.env
-*.log
+
+# Dependencies
+node_modules
+
+# Data
+data
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+test-*
+*.test.js
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
 .DS_Store
-.kiro
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
