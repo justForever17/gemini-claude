@@ -83,8 +83,11 @@ async function loadConfiguration() {
       const config = await response.json();
       document.getElementById('geminiApiUrl').value = config.geminiApiUrl || '';
       document.getElementById('geminiApiKey').value = config.geminiApiKey || '';
-      document.getElementById('geminiModelName').value = config.geminiModelName || 'gemini-1.5-pro-latest';
+      document.getElementById('geminiModelName').value = config.geminiModelName || 'gemini-2.5-flash';
       document.getElementById('localApiKey').value = config.localApiKey || '';
+      
+      // Update Claude API URL display
+      updateClaudeApiUrl();
     } else {
       showError(configError, 'Failed to load configuration');
     }
@@ -117,6 +120,8 @@ configForm.addEventListener('submit', async (e) => {
     
     if (response.ok) {
       showSuccess(configSuccess, 'Configuration saved successfully');
+      // Update Claude API URL display
+      updateClaudeApiUrl();
       // Test connection after saving
       testConnection();
     } else {
@@ -234,5 +239,20 @@ logoutBtn.addEventListener('click', () => {
   document.getElementById('loginPassword').value = '';
 });
 
+// Update Claude API URL display
+function updateClaudeApiUrl() {
+  const url = `${window.location.protocol}//${window.location.host}/v1/messages`;
+  document.getElementById('claudeApiUrl').value = url;
+}
+
+// Copy Claude API URL
+document.getElementById('copyUrlBtn').addEventListener('click', () => {
+  const url = document.getElementById('claudeApiUrl').value;
+  navigator.clipboard.writeText(url).then(() => {
+    showSuccess(configSuccess, 'Claude API URL copied to clipboard');
+  });
+});
+
 // Initialize
 initTheme();
+updateClaudeApiUrl();

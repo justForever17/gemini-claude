@@ -1,194 +1,282 @@
-# Gemini-Claude Proxy
+# Gemini to Claude API Proxy
 
-A lightweight API proxy service that converts between Anthropic Claude API format and third-party Gemini API format. This allows you to use Claude Code, Claude VSCode plugin, and other Claude-compatible tools with Gemini API endpoints.
+将 Gemini API 转换为 Claude API 格式的代理服务，支持 Claude Code、Claude code VS Plugin 等客户端。
 
-## Features
+## ✨ 特性
 
-- 🔄 Bidirectional API conversion (Claude ↔ Gemini)
-- 🌊 Streaming response support
-- 🔐 Password-protected configuration interface
-- 🎨 Light/Dark theme support
-- 🔑 Local API key generation
-- 📊 Real-time connectivity monitoring
-- 🐳 Docker containerization
-- 💾 Persistent configuration storage
+- 🔄 完整的 API 格式转换（Gemini ↔ Claude）
+- 🌊 支持流式响应（SSE）
+- 🎯 完全兼容 Claude Code / VS Plugin
+- 🔐 API Key 认证
+- 🎨 Web 管理界面
+- 🐳 Docker 一键部署
 
-## Quick Start
+## 🚀 快速开始
 
-### Using Docker Compose (Recommended)
+### 使用 Docker Compose（推荐）
 
-1. Clone this repository
-2. Create a `.env` file (optional):
-
-```env
-ADMIN_PASSWORD=your_secure_password
-GEMINI_API_URL=https://your-gemini-api-endpoint.com/v1beta
-GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL_NAME=gemini-1.5-pro-latest
+1. 克隆项目
+```bash
+git clone https://github.com/justForever17/gemini-claude.git
+cd gemini-claude
 ```
 
-3. Start the service:
-
+2. 启动服务
 ```bash
 docker-compose up -d
 ```
 
-4. Access the configuration UI at `http://localhost:9000`
+3. 访问管理界面并配置
+```
+http://localhost:9000
+```
+- 默认密码：`admin123`
+- 登录后在配置页面设置你的 Gemini API Key
+- 配置 API URL、模型等参数
+- 点击保存并测试连接
 
-### Using Docker
+### 手动部署
 
+1. 安装依赖
 ```bash
-# Build the image
-docker build -t gemini-claude-proxy .
-
-# Run the container
-docker run -d \
-  -p 9000:9000 \
-  -v $(pwd)/data:/app/data \
-  -e ADMIN_PASSWORD=your_password \
-  -e GEMINI_API_URL=https://your-api-endpoint.com/v1beta \
-  -e GEMINI_API_KEY=your_api_key \
-  -e GEMINI_MODEL_NAME=gemini-1.5-pro-latest \
-  --name gemini-claude-proxy \
-  gemini-claude-proxy
+npm install
 ```
 
-### Using Node.js
-
+2. 启动服务
 ```bash
-# Install dependencies
-npm install
-
-# Set environment variables (optional)
-export ADMIN_PASSWORD=your_password
-export GEMINI_API_URL=https://your-api-endpoint.com/v1beta
-export GEMINI_API_KEY=your_api_key
-export GEMINI_MODEL_NAME=gemini-1.5-pro-latest
-
-# Start the server
 npm start
 ```
 
-## Configuration
+3. 访问 `http://localhost:9000` 进行配置
 
-### Environment Variables
+## 🔧 配置
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ADMIN_PASSWORD` | Initial admin password for configuration UI | `admin123` |
-| `GEMINI_API_URL` | Third-party Gemini API base URL | Empty |
-| `GEMINI_API_KEY` | API key for Gemini service | Empty |
-| `GEMINI_MODEL_NAME` | Gemini model name | `gemini-1.5-pro-latest` |
-| `PORT` | Server port | `9000` |
+所有配置都可以通过 Web 管理界面完成，无需修改配置文件。
 
-### Configuration UI
+### Web 管理界面配置
 
-1. Navigate to `http://localhost:9000`
-2. Login with your admin password
-3. Configure:
-   - **Gemini API URL**: Your third-party Gemini API endpoint
-   - **Gemini API Key**: Your API key for the Gemini service
-   - **Gemini Model Name**: The model to use (e.g., `gemini-1.5-pro-latest`)
-   - **Local API Key**: Generated key for downstream clients (can be regenerated)
-4. Save configuration and verify connectivity
+访问 `http://localhost:9000`，登录后可以配置：
 
-### Using with Claude Clients
+#### 注意！使用Gemini-balance 时，URL后必须手动添加/v1beta
+- **Gemini API URL**: Gemini API 地址（默认：`https://generativelanguage.googleapis.com/v1beta`）
+- **Gemini API Key**: 你的 Gemini API Key
+- **模型选择**: 
+  - `gemini-2.5-pro` - 最强大的模型
+  - `gemini-2.5-flash` - 速度快，稳定性高
+- **本地 API Key**: 用于客户端连接的密钥（自动生成）
+- **管理员密码**: Web 界面登录密码
 
-#### Claude Code / VSCode Plugin
+### 环境变量（可选）
 
-1. Open settings
-2. Set API endpoint to: `http://localhost:9000`
-3. Set API key to: The local API key from the configuration UI
-4. Select any Claude model (the proxy will use your configured Gemini model)
+如果需要通过环境变量预配置，可以设置：
 
-## API Endpoints
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `PORT` | 服务端口 | `9000` |
+| `GEMINI_API_URL` | Gemini API 地址 | 通过 Web 配置 |
+| `GEMINI_API_KEY` | Gemini API Key | 通过 Web 配置 |
+| `GEMINI_MODEL` | 使用的模型 | 通过 Web 配置 |
+| `ADMIN_PASSWORD` | 管理员密码 | `admin123` |
 
-### Proxy Endpoint
+## 📱 客户端配置
 
-**POST** `/v1/messages`
+### Claude Code
 
-Accepts Claude API format requests and returns Claude API format responses.
+配置文件位置：
+- Windows: `C:\Users\<用户名>\.claude\settings.json`
+- macOS/Linux: `~/.claude/settings.json`
 
-**Headers:**
-- `Authorization: Bearer <local_api_key>`
-- `Content-Type: application/json`
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:9000",
+    "ANTHROPIC_AUTH_TOKEN": "your-local-api-key",
+    "ANTHROPIC_MODEL": "gemini-2.5-pro",
+    "ANTHROPIC_SMALL_FAST_MODEL": "gemini-2.5-pro"
+  }
+}
+```
 
-**Example Request:**
+
+### 直接 API 调用
+
+```bash
+curl http://localhost:9000/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-local-api-key" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 1024,
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
+
+## 🎨 Web 管理界面
+
+访问 `http://localhost:9000` 可以：
+
+- 📊 查看服务状态和连接信息
+- ⚙️ 配置 Gemini API（URL、Key、模型）
+- 🔑 查看和管理本地 API Key
+- 🧪 测试 Gemini API 连接
+- 🔐 修改管理员密码
+
+**默认密码**: `admin123`（首次登录后会自动加密存储）
+
+**首次使用流程**:
+1. 使用默认密码登录
+2. 在配置页面填写你的 Gemini API Key
+3. 选择要使用的模型
+4. 点击"测试连接"确认配置正确
+5. 保存配置
+6. 复制本地 API Key 用于客户端配置
+
+## 🔐 API Key 管理
+
+### 获取本地 API Key
+
+1. 访问 Web 界面
+2. 登录后在配置页面查看
+3. 或查看 `data/config.json` 文件
+
+### 生成新的 API Key
+
+```bash
+# 在容器中执行
+docker exec gemini-claude-proxy node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+## 📝 API 格式说明
+
+### 请求格式（Claude API）
+
 ```json
 {
   "model": "claude-3-5-sonnet-20241022",
   "max_tokens": 1024,
+  "system": "You are a helpful assistant.",
   "messages": [
     {
       "role": "user",
-      "content": "Hello, how are you?"
+      "content": "Hello!"
     }
   ]
 }
 ```
 
-### Configuration API
+### 响应格式（Claude API）
 
-All configuration endpoints require the `x-session-token` header obtained from login.
-
-- **POST** `/api/login` - Authenticate admin user
-- **GET** `/api/config` - Get current configuration
-- **POST** `/api/config` - Update configuration
-- **POST** `/api/test-connection` - Test Gemini API connectivity
-- **POST** `/api/generate-key` - Generate new local API key
-- **POST** `/api/change-password` - Change admin password
-
-## Data Persistence
-
-Configuration is stored in `/app/data/config.json` inside the container. When using Docker, mount a volume to persist data across container restarts:
-
-```bash
--v $(pwd)/data:/app/data
+```json
+{
+  "id": "msg_xxx",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "Hello! How can I help you?",
+      "citations": null
+    }
+  ],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 20
+  }
+}
 ```
 
-## Security Considerations
+## 🔄 流式响应
 
-- Change the default admin password immediately
-- Use HTTPS in production (consider using a reverse proxy like nginx)
-- Keep your Gemini API key secure
-- Regenerate the local API key if compromised
-- The configuration file contains sensitive data - protect it appropriately
-
-## Troubleshooting
-
-### Connection Test Fails
-
-- Verify the Gemini API URL is correct and accessible
-- Check that the API key is valid
-- Ensure the model name is supported by your Gemini API endpoint
-- Check network connectivity from the container
-
-### Proxy Requests Fail
-
-- Verify the local API key is correct
-- Check that the Gemini API configuration is saved
-- Review server logs: `docker logs gemini-claude-proxy`
-
-### Configuration Not Persisting
-
-- Ensure the data volume is properly mounted
-- Check file permissions on the data directory
-- Verify the container has write access to `/app/data`
-
-## Development
+支持 Server-Sent Events (SSE) 流式响应：
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
+curl http://localhost:9000/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-local-api-key" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 1024,
+    "stream": true,
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
 ```
 
-## License
+## 🐛 故障排除
 
-MIT
+### 查看日志
 
-## Contributing
+```bash
+# Docker
+docker logs gemini-claude-proxy
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+# 实时日志
+docker logs -f gemini-claude-proxy
+```
+
+### 常见问题
+
+**Q: 502 错误 - Gemini API request failed**
+- 检查 Gemini API URL 和 Key 是否正确
+- 确认网络连接正常
+- 尝试切换到 `gemini-2.5-flash` 模型
+
+**Q: 401 错误 - Unauthorized**
+- 检查本地 API Key 是否正确
+- 确认 Authorization header 格式：`Bearer your-api-key`
+
+**Q: Claude Code 无法连接**
+- 确认服务运行在 `http://localhost:9000`
+- 检查 `.claude/settings.json` 配置
+- 重启 Claude Code
+
+## 🏗️ 项目结构
+
+```
+.
+├── src/
+│   ├── server.js          # 主服务器
+│   ├── proxy.js           # API 转换逻辑
+│   ├── auth.js            # 认证中间件
+│   ├── config.js          # 配置管理
+│   └── public/            # Web 界面
+│       ├── index.html
+│       ├── app.js
+│       └── styles.css
+├── data/                  # 持久化数据
+│   └── config.json
+├── Dockerfile
+├── docker-compose.yml
+└── package.json
+```
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+## 📄 许可证
+
+MIT License
+
+## 🔗 相关链接
+
+- [Gemini API 文档](https://ai.google.dev/docs)
+- [Claude API 文档](https://docs.anthropic.com/claude/reference)
+- [Claude Code](https://www.anthropic.com/claude/code)
+- [Continue](https://continue.dev)
+
+## ⭐ Star History
+
+如果这个项目对你有帮助，请给个 Star ⭐️
+
+---
+
+Made with ❤️ by [justForever17](https://github.com/justForever17)

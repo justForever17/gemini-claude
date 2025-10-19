@@ -227,6 +227,13 @@ body {
   display: block;
 }
 
+.form-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
 @media (max-width: 768px) {
   .card {
     padding: 30px 20px;

@@ -1,6 +1,44 @@
+# Dependencies
 node_modules/
-data/config.json
+package-lock.json
+
+# Data
 data/
-.env
+*.json
+
+# Logs
+logs/
 *.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Test files
+test-*.js
+test-*.json
+test-*.md
+
+# Temporary files
+*.tmp
+*.temp
+*.vue
+
+# Documentation (keep only README.md)
+*-FIX.md
+*-TROUBLESHOOTING.md
+*-SUCCESS.md
+*-READY.md
+FINAL-CONFIGURATION.md

@@ -24,17 +24,18 @@ const safetySettings = [
 }));
 
 /**
- * Build complete Gemini API endpoint URL
- * @param {Object} config - Configuration object with geminiApiUrl and geminiModelName
+ * Build complete Gemini API endpoint URL with API key
+ * @param {Object} config - Configuration object with geminiApiUrl, geminiModelName, and geminiApiKey
  * @param {boolean} stream - Whether this is a streaming request
- * @returns {string} Complete API endpoint URL
+ * @returns {string} Complete API endpoint URL with key parameter
  */
 function buildGeminiUrl(config, stream) {
-  const { geminiApiUrl, geminiModelName } = config;
+  const { geminiApiUrl, geminiModelName, geminiApiKey } = config;
   let url = `${geminiApiUrl}/models/${geminiModelName}:`;
   url += stream ? 'streamGenerateContent' : 'generateContent';
+  url += `?key=${geminiApiKey}`;
   if (stream) {
-    url += '?alt=sse';
+    url += '&alt=sse';
   }
   return url;
 }
@@ -53,12 +54,25 @@ function claudeToGeminiRequest(claudeRequest) {
   
   // Handle system instruction
   if (claudeRequest.system) {
-    geminiRequest.system_instruction = {
-      parts: [{ text: claudeRequest.system }]
-    };
+    let systemText = '';
+    if (typeof claudeRequest.system === 'string') {
+      systemText = claudeRequest.system;
+    } else if (Array.isArray(claudeRequest.system)) {
+      // Handle array of system instruction blocks
+      systemText = claudeRequest.system
+        .map(block => block.type === 'text' ? block.text : '')
+        .filter(text => text)
+        .join('\n\n');
+    }
+    
+    if (systemText) {
+      geminiRequest.system_instruction = {
+        parts: [{ text: systemText }]
+      };
+    }
   }
   
-  // Convert messages
+  // Convert messages - merge consecutive messages with same role
   for (const msg of claudeRequest.messages || []) {
     const role = msg.role === 'assistant' ? 'model' : 'user';
     const parts = [];
@@ -80,7 +94,15 @@ function claudeToGeminiRequest(claudeRequest) {
       }
     }
     
-    geminiRequest.contents.push({ role, parts });
+    // Check if we should merge with previous message
+    const lastContent = geminiRequest.contents[geminiRequest.contents.length - 1];
+    if (lastContent && lastContent.role === role) {
+      // Merge with previous message of same role
+      lastContent.parts.push(...parts);
+    } else {
+      // Add as new message
+      geminiRequest.contents.push({ role, parts });
+    }
   }
   
   // Map generation parameters
@@ -131,7 +153,8 @@ function geminiToClaudeResponse(geminiResponse, model, messageId) {
   const content = candidate.content?.parts
     ?.map(p => ({
       type: 'text',
-      text: p.text || ''
+      text: p.text || '',
+      citations: null
     }))
     .filter(c => c.text) || [];
   

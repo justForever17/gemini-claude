@@ -30,13 +30,13 @@ function loadConfig() {
   } catch (error) {
     console.error('Error loading config:', error.message);
   }
-  
+
   // Return default configuration
   return {
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123',
     geminiApiUrl: process.env.GEMINI_API_URL || '',
     geminiApiKey: process.env.GEMINI_API_KEY || '',
-    geminiModelName: process.env.GEMINI_MODEL_NAME || 'gemini-1.5-pro-latest',
+    geminiModelName: process.env.GEMINI_MODEL_NAME || 'gemini-2.5-flash',
     localApiKey: generateApiKey(),
     version: '1.0.0'
   };
@@ -54,7 +54,7 @@ function saveConfig(config) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    
+
     const tempFile = CONFIG_FILE + '.tmp';
     fs.writeFileSync(tempFile, JSON.stringify(config, null, 2), 'utf8');
     fs.renameSync(tempFile, CONFIG_FILE);
@@ -88,29 +88,29 @@ function validateUrl(url) {
  */
 function validateConfig(config) {
   const validated = { ...config };
-  
+
   // Ensure required fields exist
   if (!validated.adminPassword) {
     validated.adminPassword = 'admin123';
   }
-  
+
   if (!validated.localApiKey) {
     validated.localApiKey = generateApiKey();
   }
-  
+
   if (!validated.geminiModelName) {
-    validated.geminiModelName = 'gemini-1.5-pro-latest';
+    validated.geminiModelName = 'gemini-2.5-flash';
   }
-  
+
   if (!validated.version) {
     validated.version = '1.0.0';
   }
-  
+
   // Validate URL format
   if (validated.geminiApiUrl && !validateUrl(validated.geminiApiUrl)) {
     throw new Error('Invalid Gemini API URL format. Must use https://');
   }
-  
+
   return validated;
 }
 

@@ -47,6 +47,7 @@
           <div class="form-group">
             <label for="geminiApiUrl">API URL</label>
             <input type="url" id="geminiApiUrl" placeholder="https://example.com/v1beta" required>
+            <small class="form-hint">Include the version path (e.g., /v1beta)</small>
           </div>
 
           <div class="form-group">
@@ -68,6 +69,14 @@
               <input type="text" id="localApiKey" readonly>
               <button type="button" id="copyKeyBtn" class="btn btn-secondary">Copy</button>
               <button type="button" id="generateKeyBtn" class="btn btn-secondary">Generate New</button>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="claudeApiUrl">Claude API Endpoint (use this in Claude clients)</label>
+            <div class="input-with-button">
+              <input type="text" id="claudeApiUrl" readonly>
+              <button type="button" id="copyUrlBtn" class="btn btn-secondary">Copy</button>
             </div>
           </div>
         </div>

@@ -127,20 +127,29 @@ app.post('/api/test-connection', requireSession, async (req, res) => {
       return res.json({ connected: false, error: 'API URL or key not configured' });
     }
     
-    const testUrl = `${config.geminiApiUrl}/models/${config.geminiModelName}:generateContent`;
+    // Build test URL with API key as query parameter
+    const testUrl = `${config.geminiApiUrl}/models/${config.geminiModelName}:generateContent?key=${config.geminiApiKey}`;
+    
     const response = await fetch(testUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': config.geminiApiKey
+        'x-goog-api-client': 'genai-js/0.21.0'
       },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
-        generationConfig: { maxOutputTokens: 10 }
+        generationConfig: { maxOutputTokens: 64000 }
       })
     });
     
-    res.json({ connected: response.ok });
+    const responseText = await response.text();
+    console.log('Connection test response:', response.status, responseText);
+    
+    res.json({ 
+      connected: response.ok,
+      status: response.status,
+      error: response.ok ? null : responseText
+    });
   } catch (error) {
     console.error('Connection test error:', error);
     res.json({ connected: false, error: error.message });
@@ -217,27 +226,36 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
     const messageId = generateMessageId();
     const isStreaming = claudeRequest.stream === true;
     
+    console.log('Received Claude request:', JSON.stringify(claudeRequest, null, 2));
+    
     // Convert request
     const geminiRequest = claudeToGeminiRequest(claudeRequest);
     
+    console.log('Converted to Gemini request:', JSON.stringify(geminiRequest, null, 2));
+    
     // Build Gemini API URL
     const geminiUrl = buildGeminiUrl(config, isStreaming);
+    console.log('Gemini URL:', geminiUrl.replace(/key=.+/, 'key=***'));
     
-    // Forward to Gemini API
+    // Forward to Gemini API (API key is in URL)
     const response = await fetch(geminiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': config.geminiApiKey
+        'x-goog-api-client': 'genai-js/0.21.0'
       },
       body: JSON.stringify(geminiRequest)
     });
     
     if (!response.ok) {
       const error = await response.text();
-      console.error('Gemini API error:', error);
+      console.error('Gemini API error:', response.status, error);
       return res.status(502).json({
-        error: { type: 'upstream_error', message: 'Gemini API request failed' }
+        error: { 
+          type: 'upstream_error', 
+          message: 'Gemini API request failed',
+          details: error
+        }
       });
     }
     
@@ -246,6 +264,7 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
+      res.setHeader('anthropic-version', '2023-06-01');
       
       const parser = new GeminiStreamParser();
       const converter = new ClaudeStreamConverter(claudeRequest.model || 'claude-3-5-sonnet-20241022', messageId);
@@ -283,11 +302,18 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
     } else {
       // Handle non-streaming response
       const geminiResponse = await response.json();
+      console.log('Gemini response:', JSON.stringify(geminiResponse, null, 2));
+      
       const claudeResponse = geminiToClaudeResponse(
         geminiResponse, 
         claudeRequest.model || 'claude-3-5-sonnet-20241022',
         messageId
       );
+      console.log('Claude response:', JSON.stringify(claudeResponse, null, 2));
+      
+      // Set proper headers for Claude API compatibility
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('anthropic-version', '2023-06-01');
       res.json(claudeResponse);
     }
   } catch (error) {

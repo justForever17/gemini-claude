@@ -7,11 +7,18 @@ services:
     ports:
       - "9000:9000"
     volumes:
+      # 持久化配置数据
       - ./data:/app/data
-    environment:
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
-      - GEMINI_API_URL=${GEMINI_API_URL:-}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME:-gemini-1.5-pro-latest}
-      - NODE_ENV=production
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# 快速开始：
+# 1. 运行：docker-compose up -d
+# 2. 访问：http://localhost:9000
+# 3. 使用默认密码 admin123 登录
+# 4. 在配置页面设置你的 Gemini API Key 和其他参数

@@ -3,6 +3,9 @@ FROM node:20-alpine
 # Create app directory
 WORKDIR /app
 
+# Install build dependencies for bcrypt
+RUN apk add --no-cache python3 make g++
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
