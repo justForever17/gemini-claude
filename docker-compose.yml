@@ -4,16 +4,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # 适应慢速网络环境 - 设置超长超时时间
-      network_mode: host
+      # 适应慢速网络环境
       args:
         - HTTP_PROXY=${HTTP_PROXY:-}
         - HTTPS_PROXY=${HTTPS_PROXY:-}
-        - BUILDKIT_STEP_LOG_MAX_SIZE=50000000
-        - BUILDKIT_STEP_LOG_MAX_SPEED=10000000
     container_name: gemini-claude-proxy
-    ports:
-      - "9000:9000"
+    network_mode: host
     volumes:
       # 持久化配置数据
       - ./data:/app/data
@@ -27,17 +23,20 @@ services:
       start_period: 40s
 
 # 快速开始：
-# 1. 运行：DOCKER_BUILDKIT=1 COMPOSE_HTTP_TIMEOUT=600000 docker-compose up -d --build
-# 2. 访问：http://localhost:9000
-# 3. 使用默认密码 admin123 登录
-# 4. 在配置页面设置你的 Gemini API Key 和其他参数
-
-# 慢速网络环境（重要）：
-# 必须设置超时环境变量：
+# 必须设置超长超时时间（重要！）
 # export DOCKER_BUILDKIT=1
 # export COMPOSE_HTTP_TIMEOUT=600000
 # export DOCKER_CLIENT_TIMEOUT=600000
-# docker-compose build --no-cache
+# 
+# 然后运行：
 # docker-compose up -d
 # 
-# 或者使用国内镜像（在 Dockerfile 中配置）
+# 访问：http://localhost:9000
+# 默认密码：admin123
+
+# 慢速网络环境：
+# 1. 设置上述环境变量（必须！）
+# 2. 可选：使用代理
+#    export HTTP_PROXY=http://your-proxy:port
+#    export HTTPS_PROXY=http://your-proxy:port
+# 3. 可选：使用国内镜像（编辑 Dockerfile 取消注释）
