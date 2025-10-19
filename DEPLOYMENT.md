@@ -10,6 +10,12 @@ cd gemini-claude
 
 ### 2. 启动服务
 ```bash
+# 设置超长超时时间（重要！）
+export DOCKER_BUILDKIT=1
+export COMPOSE_HTTP_TIMEOUT=600000
+export DOCKER_CLIENT_TIMEOUT=600000
+
+# 启动服务
 docker-compose up -d
 ```
 
@@ -25,7 +31,10 @@ docker-compose up -d
 ### 方案 1: 使用代理
 
 ```bash
-# 设置代理环境变量
+# 设置超时和代理环境变量（重要！）
+export DOCKER_BUILDKIT=1
+export COMPOSE_HTTP_TIMEOUT=600000
+export DOCKER_CLIENT_TIMEOUT=600000
 export HTTP_PROXY=http://your-proxy:port
 export HTTPS_PROXY=http://your-proxy:port
 
@@ -48,9 +57,15 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN npm config set registry https://registry.npmmirror.com
 ```
 
-2. 构建并启动：
+2. 设置超时并构建：
 
 ```bash
+# 设置超长超时时间
+export DOCKER_BUILDKIT=1
+export COMPOSE_HTTP_TIMEOUT=600000
+export DOCKER_CLIENT_TIMEOUT=600000
+
+# 构建并启动
 docker-compose build --no-cache
 docker-compose up -d
 ```
@@ -74,6 +89,11 @@ RUN npm ci --only=production --timeout=1200000
 如果一次性构建失败，可以分步进行：
 
 ```bash
+# 0. 设置超长超时时间（必须！）
+export DOCKER_BUILDKIT=1
+export COMPOSE_HTTP_TIMEOUT=600000
+export DOCKER_CLIENT_TIMEOUT=600000
+
 # 1. 先拉取基础镜像
 docker pull node:20-alpine
 

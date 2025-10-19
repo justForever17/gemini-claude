@@ -26,21 +26,30 @@ cd gemini-claude
 
 2. 启动服务
 ```bash
+# 设置超长超时时间（慢速网络必须！）
+export DOCKER_BUILDKIT=1
+export COMPOSE_HTTP_TIMEOUT=600000
+export DOCKER_CLIENT_TIMEOUT=600000
+
+# 启动服务
 docker-compose up -d
 ```
 
-**慢速网络环境**：如果构建很慢，可以：
+**慢速网络环境**：如果仍然超时，可以：
 
 ```bash
 # 方法 1: 使用代理
 export HTTP_PROXY=http://your-proxy:port
 export HTTPS_PROXY=http://your-proxy:port
-docker-compose build --no-cache
 
 # 方法 2: 使用国内镜像
 # 编辑 Dockerfile，取消注释以下两行：
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 # RUN npm config set registry https://registry.npmmirror.com
+
+# 然后构建
+docker-compose build --no-cache
+docker-compose up -d
 ```
 
 3. 访问管理界面并配置
