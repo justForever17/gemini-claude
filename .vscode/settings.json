@@ -1,2 +1,7 @@
 {
+  "json.schemas": [],
+  "json.validate.enable": true,
+  "files.associations": {
+    "data/config.json": "json"
+  }
 }

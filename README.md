@@ -127,23 +127,6 @@ npm start
 }
 ```
 
-
-### 直接 API 调用
-
-```bash
-curl http://localhost:9000/v1/messages \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-local-api-key" \
-  -H "anthropic-version: 2023-06-01" \
-  -d '{
-    "model": "claude-3-5-sonnet-20241022",
-    "max_tokens": 1024,
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
-```
-
 ## 🎨 Web 管理界面
 
 访问 `http://localhost:9000` 可以：
@@ -185,7 +168,7 @@ docker exec gemini-claude-proxy node -e "console.log(require('crypto').randomByt
 
 ```json
 {
-  "model": "claude-3-5-sonnet-20241022",
+  "model": "****",
   "max_tokens": 1024,
   "system": "You are a helpful assistant.",
   "messages": [
@@ -211,7 +194,7 @@ docker exec gemini-claude-proxy node -e "console.log(require('crypto').randomByt
       "citations": null
     }
   ],
-  "model": "claude-3-5-sonnet-20241022",
+  "model": "***",
   "stop_reason": "end_turn",
   "stop_sequence": null,
   "usage": {
@@ -231,7 +214,7 @@ curl http://localhost:9000/v1/messages \
   -H "Authorization: Bearer your-local-api-key" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
-    "model": "claude-3-5-sonnet-20241022",
+    "model": "***",
     "max_tokens": 1024,
     "stream": true,
     "messages": [
@@ -241,6 +224,25 @@ curl http://localhost:9000/v1/messages \
 ```
 
 ## 🐛 故障排除
+
+### 配置无法保存
+
+**症状**: Web 界面保存配置后没有反应，修改密码失败
+
+**原因**: Docker 容器内的 nodejs 用户没有权限写入 `./data` 目录
+
+**解决方案**:
+```bash
+# 1. 停止容器
+docker compose down
+
+# 2. 修复权限
+chmod 777 ./data
+
+# 3. 重启
+docker compose up -d
+```
+
 
 ### 查看日志
 

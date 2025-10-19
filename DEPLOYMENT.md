@@ -10,11 +10,6 @@ cd gemini-claude
 
 ### 2. 启动服务
 ```bash
-# 设置超长超时时间（重要！）
-export DOCKER_BUILDKIT=1
-export COMPOSE_HTTP_TIMEOUT=600000
-export DOCKER_CLIENT_TIMEOUT=600000
-
 # 启动服务
 docker-compose up -d
 ```
@@ -28,24 +23,26 @@ docker-compose up -d
 
 如果你的网络环境较慢（如国内网络），可以使用以下优化方案：
 
-### 方案 1: 使用代理
+### 步骤 1: 使用docker镜像源
 
 ```bash
-# 设置超时和代理环境变量（重要！）
-export DOCKER_BUILDKIT=1
-export COMPOSE_HTTP_TIMEOUT=600000
-export DOCKER_CLIENT_TIMEOUT=600000
-export HTTP_PROXY=http://your-proxy:port
-export HTTPS_PROXY=http://your-proxy:port
+# 配置docker镜像源（重要！）
+{
+  "registry-mirrors": [
+    "https://docker.xuanyuan.me",
+    "https://docker.1ms.run",
+    "https://hub-mirror.c.163.com"
+  ]
+}
 
-# 构建镜像
-docker-compose build --no-cache
+# 先拉取镜像（网速给力则跳过）
+docker pull node:20-alpine
 
 # 启动服务
 docker-compose up -d
 ```
 
-### 方案 2: 使用国内镜像源
+### 步骤 2: 使用国内镜像源
 
 1. 编辑 `Dockerfile`，取消注释以下两行：
 
@@ -60,54 +57,9 @@ RUN npm config set registry https://registry.npmmirror.com
 2. 设置超时并构建：
 
 ```bash
-# 设置超长超时时间
-export DOCKER_BUILDKIT=1
-export COMPOSE_HTTP_TIMEOUT=600000
-export DOCKER_CLIENT_TIMEOUT=600000
-
-# 构建并启动
-docker-compose build --no-cache
+# 启动
 docker-compose up -d
 ```
-
-### 方案 3: 增加超时时间
-
-Dockerfile 已经配置了较长的超时时间：
-- APK 安装超时：600 秒
-- NPM 安装超时：600 秒（10 分钟）
-
-如果仍然超时，可以进一步增加：
-
-```dockerfile
-# 修改 Dockerfile 中的超时参数
-RUN apk add --no-cache --timeout 1200 python3 make g++
-RUN npm ci --only=production --timeout=1200000
-```
-
-### 方案 4: 分步构建
-
-如果一次性构建失败，可以分步进行：
-
-```bash
-# 0. 设置超长超时时间（必须！）
-export DOCKER_BUILDKIT=1
-export COMPOSE_HTTP_TIMEOUT=600000
-export DOCKER_CLIENT_TIMEOUT=600000
-
-# 1. 先拉取基础镜像
-docker pull node:20-alpine
-
-# 2. 构建镜像（不使用缓存）
-docker-compose build --no-cache
-
-# 3. 如果失败，重试构建
-docker-compose build
-
-# 4. 启动服务
-docker-compose up -d
-```
-
----
 
 ## 🔧 构建问题排查
 
@@ -119,9 +71,9 @@ npm ERR! network timeout
 ```
 
 **解决方案**：
-1. 使用国内 npm 镜像（方案 2）
-2. 使用代理（方案 1）
-3. 增加超时时间（方案 3）
+1. 使用国内 npm 镜像
+2. 使用代理
+3. 增加超时时
 
 ### 问题 2: apk add 失败
 
@@ -131,37 +83,9 @@ ERROR: unable to select packages
 ```
 
 **解决方案**：
-1. 使用国内 Alpine 镜像（方案 2）
+1. 使用国内 Alpine 镜像
 2. 检查网络连接
 3. 重试构建
-
-### 问题 3: Docker 拉取镜像慢
-
-**症状**：
-```
-Pulling from library/node...
-```
-
-**解决方案**：
-
-配置 Docker 使用国内镜像源：
-
-```bash
-# Linux/Mac
-sudo mkdir -p /etc/docker
-sudo tee /etc/docker/daemon.json <<-'EOF'
-{
-  "registry-mirrors": [
-    "https://docker.mirrors.ustc.edu.cn",
-    "https://hub-mirror.c.163.com"
-  ]
-}
-EOF
-sudo systemctl restart docker
-
-# Windows
-# 在 Docker Desktop 设置中添加镜像源
-```
 
 ---
 
@@ -227,7 +151,7 @@ docker-compose up -d
 
 ### 保留配置
 
-配置文件存储在 `./data` 目录，更新不会影响现有配置。
+配置文件存储在 `./data` 目录，更新不会影响现有配置。（docker部署需要提权）
 
 ---
 
