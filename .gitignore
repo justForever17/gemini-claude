@@ -1,10 +1,13 @@
 # Dependencies
 node_modules/
-package-lock.json
 
-# Data
+# Data and Configuration (包含敏感信息)
 data/
-*.json
+data/config.json
+
+# 保留 package.json 和 package-lock.json
+!package.json
+!package-lock.json
 
 # Logs
 logs/

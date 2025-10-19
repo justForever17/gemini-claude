@@ -258,6 +258,19 @@ docker logs -f gemini-claude-proxy
 └── package.json
 ```
 
+## 🔒 安全说明
+
+**重要**: 你的配置文件（包含 API Key 和密码）不会被上传到 Git 仓库。
+
+- `data/` 目录已在 `.gitignore` 中排除
+- 所有敏感信息都存储在本地
+- 详细安全说明请查看 [SECURITY.md](SECURITY.md)
+
+**安全建议**:
+- 首次登录后立即修改默认密码
+- 不要在公开场合分享你的 API Key
+- 定期备份配置文件到安全位置
+
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
