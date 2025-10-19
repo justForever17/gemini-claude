@@ -24,32 +24,36 @@ git clone https://github.com/justForever17/gemini-claude.git
 cd gemini-claude
 ```
 
-2. 启动服务
+2. 配置 Docker 镜像加速（慢速网络必须！）
 ```bash
-# 设置超长超时时间（慢速网络必须！）
-export DOCKER_BUILDKIT=1
-export COMPOSE_HTTP_TIMEOUT=600000
-export DOCKER_CLIENT_TIMEOUT=600000
-
-# 启动服务
-docker-compose up -d
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<EOF
+{
+  "registry-mirrors": [
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://hub-mirror.c.163.com"
+  ]
+}
+EOF
+sudo systemctl restart docker
 ```
 
-**慢速网络环境**：如果仍然超时，可以：
-
+3. 先拉取基础镜像
 ```bash
-# 方法 1: 使用代理
-export HTTP_PROXY=http://your-proxy:port
-export HTTPS_PROXY=http://your-proxy:port
+docker pull node:20-alpine
+```
 
-# 方法 2: 使用国内镜像
-# 编辑 Dockerfile，取消注释以下两行：
-# RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-# RUN npm config set registry https://registry.npmmirror.com
+4. 编辑 Dockerfile 使用国内源
+```bash
+# 取消注释以下两行：
+# 第 10 行：RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+# 第 25 行：RUN npm config set registry https://registry.npmmirror.com
+```
 
-# 然后构建
-docker-compose build --no-cache
-docker-compose up -d
+5. 构建并启动
+```bash
+docker compose build --no-cache
+docker compose up -d
 ```
 
 3. 访问管理界面并配置

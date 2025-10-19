@@ -22,20 +22,29 @@ services:
       start_period: 40s
 
 # 快速开始：
-# 必须设置超长超时时间（重要！）
-# export DOCKER_BUILDKIT=1
-# export COMPOSE_HTTP_TIMEOUT=600000
-# export DOCKER_CLIENT_TIMEOUT=600000
 # 
-# 然后运行：
-# docker-compose up -d
+# 慢速网络解决方案：
+# 
+# 1. 配置 Docker 镜像加速（必须！）
+#    sudo mkdir -p /etc/docker
+#    sudo tee /etc/docker/daemon.json <<EOF
+#    {
+#      "registry-mirrors": [
+#        "https://docker.mirrors.ustc.edu.cn",
+#        "https://hub-mirror.c.163.com"
+#      ]
+#    }
+#    EOF
+#    sudo systemctl restart docker
+#
+# 2. 先拉取基础镜像
+#    docker pull node:20-alpine
+#
+# 3. 编辑 Dockerfile，取消注释第 10 行和第 25 行（使用国内源）
+#
+# 4. 构建并启动
+#    docker compose build --no-cache
+#    docker compose up -d
 # 
 # 访问：http://localhost:9000
 # 默认密码：admin123
-
-# 慢速网络环境：
-# 1. 设置上述环境变量（必须！）
-# 2. 可选：使用代理
-#    export HTTP_PROXY=http://your-proxy:port
-#    export HTTPS_PROXY=http://your-proxy:port
-# 3. 可选：使用国内镜像（编辑 Dockerfile 取消注释）
