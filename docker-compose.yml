@@ -12,6 +12,10 @@ services:
     volumes:
       # 持久化配置数据
       - ./data:/app/data
+    environment:
+      # 请求大小限制（支持大项目和大文件）
+      # 默认 200mb，可根据需要调整
+      - REQUEST_SIZE_LIMIT=${REQUEST_SIZE_LIMIT:-200mb}
     restart: unless-stopped
     # 健康检查配置
     healthcheck:

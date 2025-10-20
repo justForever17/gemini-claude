@@ -16,18 +16,37 @@ const {
 const app = express();
 const PORT = process.env.PORT || 9000;
 
+// Request size limit - can be configured via environment variable
+// Set to a very high value to support large projects and contexts
+const REQUEST_SIZE_LIMIT = process.env.REQUEST_SIZE_LIMIT || '200mb';
+
 // Load configuration
 let config = loadConfig();
 
-// Request logging middleware
+// Request logging middleware with size tracking
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.path}`);
+  const size = req.headers['content-length'];
+  
+  if (size) {
+    const sizeMB = (parseInt(size) / 1024 / 1024).toFixed(2);
+    if (sizeMB > 10) {
+      console.log(`[${timestamp}] ${req.method} ${req.path} - 📦 Large request: ${sizeMB}MB`);
+    } else {
+      console.log(`[${timestamp}] ${req.method} ${req.path}`);
+    }
+  } else {
+    console.log(`[${timestamp}] ${req.method} ${req.path}`);
+  }
+  
   next();
 });
 
 // Middleware
-app.use(express.json({ limit: '10mb' }));
+// High limit for request body to support unlimited data forwarding (like gemini-balance-lite)
+// This allows Claude Code to work with very large projects and contexts
+// Can be configured via REQUEST_SIZE_LIMIT environment variable
+app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
 app.use(cors());
 
 // Serve static files
@@ -353,7 +372,9 @@ app.use((req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Gemini-Claude proxy server running on port ${PORT}`);
-  console.log(`Configuration UI: http://localhost:${PORT}`);
-  console.log(`Proxy endpoint: http://localhost:${PORT}/v1/messages`);
+  console.log(`\n🚀 Gemini-Claude proxy server running on port ${PORT}`);
+  console.log(`📊 Configuration UI: http://localhost:${PORT}`);
+  console.log(`🔌 Proxy endpoint: http://localhost:${PORT}/v1/messages`);
+  console.log(`📦 Request size limit: ${REQUEST_SIZE_LIMIT}`);
+  console.log(`💡 Tip: Use stream mode for large projects and code generation\n`);
 });
