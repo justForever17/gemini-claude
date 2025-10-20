@@ -8,7 +8,8 @@ services:
         - HTTP_PROXY=${HTTP_PROXY:-}
         - HTTPS_PROXY=${HTTPS_PROXY:-}
     container_name: gemini-claude-proxy
-    network_mode: host
+    ports:
+      - "9000:9000"
     volumes:
       # 持久化配置数据
       - ./data:/app/data
