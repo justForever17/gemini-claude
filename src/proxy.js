@@ -122,6 +122,21 @@ function claudeToGeminiRequest(claudeRequest) {
     geminiRequest.generationConfig.stopSequences = claudeRequest.stop_sequences;
   }
   
+  // Convert Claude tools to Gemini function declarations
+  if (claudeRequest.tools && Array.isArray(claudeRequest.tools)) {
+    const functionDeclarations = claudeRequest.tools.map(tool => ({
+      name: tool.name,
+      description: tool.description || '',
+      parameters: tool.input_schema || {}
+    }));
+    
+    if (functionDeclarations.length > 0) {
+      geminiRequest.tools = [{
+        function_declarations: functionDeclarations
+      }];
+    }
+  }
+  
   return geminiRequest;
 }
 
@@ -150,13 +165,27 @@ function geminiToClaudeResponse(geminiResponse, model, messageId) {
     throw new Error('No candidates in Gemini response');
   }
   
-  const content = candidate.content?.parts
-    ?.map(p => ({
-      type: 'text',
-      text: p.text || '',
-      citations: null
-    }))
-    .filter(c => c.text) || [];
+  const content = [];
+  const parts = candidate.content?.parts || [];
+  
+  // Process each part (text or function call)
+  for (const part of parts) {
+    if (part.text) {
+      content.push({
+        type: 'text',
+        text: part.text,
+        citations: null
+      });
+    } else if (part.functionCall) {
+      // Convert Gemini function call to Claude tool use format
+      content.push({
+        type: 'tool_use',
+        id: `toolu_${Math.random().toString(36).substring(2, 15)}`,
+        name: part.functionCall.name,
+        input: part.functionCall.args || {}
+      });
+    }
+  }
   
   const stopReason = mapFinishReason(candidate.finishReason);
   
