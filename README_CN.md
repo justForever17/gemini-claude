@@ -11,6 +11,8 @@
 
 ![alt text](image\image.png)
 
+![alt text](image\image1.png)
+
 ## ✨ 特性
 
 - 🔄 完整的 API 格式转换（Gemini ↔ Claude）

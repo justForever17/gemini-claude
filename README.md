@@ -11,6 +11,8 @@ This project works perfectly with Gemini-balance for ultimate free usage!
 
 ![alt text](image\image.png)
 
+![alt text](image\image1.png)
+
 ## ✨ Features
 
 - 🔄 Complete API format conversion (Gemini ↔ Claude)
