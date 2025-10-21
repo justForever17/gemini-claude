@@ -131,11 +131,15 @@ function claudeToGeminiRequest(claudeRequest) {
             if (functionName !== block.tool_use_id) break;
           }
           
-          // Prepare response object
+          // Prepare response object - MUST be an object, not array or primitive
           let response;
           if (typeof block.content === 'string') {
             response = { result: block.content };
+          } else if (Array.isArray(block.content)) {
+            // If content is an array, wrap it in an object
+            response = { result: block.content };
           } else if (typeof block.content === 'object' && block.content !== null) {
+            // If it's already an object, use it directly
             response = block.content;
           } else {
             // Handle unexpected content types
