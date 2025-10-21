@@ -51,7 +51,7 @@ function claudeToGeminiRequest(claudeRequest) {
     safetySettings,
     generationConfig: {}
   };
-  
+
   // Handle system instruction
   if (claudeRequest.system) {
     let systemText = '';
@@ -64,19 +64,19 @@ function claudeToGeminiRequest(claudeRequest) {
         .filter(text => text)
         .join('\n\n');
     }
-    
+
     if (systemText) {
       geminiRequest.system_instruction = {
         parts: [{ text: systemText }]
       };
     }
   }
-  
+
   // Convert messages - merge consecutive messages with same role
   for (const msg of claudeRequest.messages || []) {
     const role = msg.role === 'assistant' ? 'model' : 'user';
     const parts = [];
-    
+
     if (typeof msg.content === 'string') {
       parts.push({ text: msg.content });
     } else if (Array.isArray(msg.content)) {
@@ -93,7 +93,7 @@ function claudeToGeminiRequest(claudeRequest) {
         }
       }
     }
-    
+
     // Check if we should merge with previous message
     const lastContent = geminiRequest.contents[geminiRequest.contents.length - 1];
     if (lastContent && lastContent.role === role) {
@@ -104,7 +104,7 @@ function claudeToGeminiRequest(claudeRequest) {
       geminiRequest.contents.push({ role, parts });
     }
   }
-  
+
   // Map generation parameters
   if (claudeRequest.max_tokens) {
     geminiRequest.generationConfig.maxOutputTokens = claudeRequest.max_tokens;
@@ -121,22 +121,82 @@ function claudeToGeminiRequest(claudeRequest) {
   if (claudeRequest.stop_sequences) {
     geminiRequest.generationConfig.stopSequences = claudeRequest.stop_sequences;
   }
-  
+
+  // Helper function: Recursively clean JSON Schema fields that Gemini doesn't support
+  function cleanJsonSchema(schema) {
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    // Handle arrays
+    if (Array.isArray(schema)) {
+      return schema.map(item => cleanJsonSchema(item));
+    }
+
+    // Create a clean copy
+    const cleaned = {};
+
+    // List of JSON Schema fields that Gemini doesn't accept
+    const unsupportedFields = [
+      'additionalProperties',
+      '$schema',
+      '$id',
+      '$ref',
+      'definitions',
+      'title',
+      'examples',
+      'default',
+      'readOnly',
+      'writeOnly',
+      'exclusiveMinimum',
+      'exclusiveMaximum',
+      'multipleOf',
+      'pattern',
+      'format',
+      'contentMediaType',
+      'contentEncoding'
+    ];
+
+    // Copy supported fields and recursively clean nested objects
+    for (const [key, value] of Object.entries(schema)) {
+      // Skip unsupported fields
+      if (unsupportedFields.includes(key)) {
+        continue;
+      }
+
+      // Recursively clean nested objects and arrays
+      if (typeof value === 'object' && value !== null) {
+        cleaned[key] = cleanJsonSchema(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+
+    return cleaned;
+  }
+
   // Convert Claude tools to Gemini function declarations
   if (claudeRequest.tools && Array.isArray(claudeRequest.tools)) {
-    const functionDeclarations = claudeRequest.tools.map(tool => ({
-      name: tool.name,
-      description: tool.description || '',
-      parameters: tool.input_schema || {}
-    }));
-    
+    const functionDeclarations = claudeRequest.tools.map(tool => {
+      // Recursively clean the entire input_schema tree
+      const cleanedSchema = tool.input_schema
+        ? cleanJsonSchema(tool.input_schema)
+        : {};
+
+      return {
+        name: tool.name,
+        description: tool.description || '',
+        parameters: cleanedSchema
+      };
+    });
+
     if (functionDeclarations.length > 0) {
       geminiRequest.tools = [{
         function_declarations: functionDeclarations
       }];
     }
   }
-  
+
   return geminiRequest;
 }
 
@@ -164,10 +224,10 @@ function geminiToClaudeResponse(geminiResponse, model, messageId) {
   if (!candidate) {
     throw new Error('No candidates in Gemini response');
   }
-  
+
   const content = [];
   const parts = candidate.content?.parts || [];
-  
+
   // Process each part (text or function call)
   for (const part of parts) {
     if (part.text) {
@@ -186,9 +246,9 @@ function geminiToClaudeResponse(geminiResponse, model, messageId) {
       });
     }
   }
-  
+
   const stopReason = mapFinishReason(candidate.finishReason);
-  
+
   return {
     id: messageId,
     type: 'message',
@@ -209,13 +269,13 @@ class GeminiStreamParser {
   constructor() {
     this.buffer = '';
   }
-  
+
   parse(chunk) {
     this.buffer += chunk;
     const events = [];
     const regex = /^data: (.*)(?:\n\n|\r\r|\r\n\r\n)/gm;
     let match;
-    
+
     while ((match = regex.exec(this.buffer)) !== null) {
       try {
         const data = JSON.parse(match[1]);
@@ -225,7 +285,7 @@ class GeminiStreamParser {
         // Skip invalid JSON
       }
     }
-    
+
     return events;
   }
 }
@@ -238,12 +298,12 @@ class ClaudeStreamConverter {
     this.index = 0;
     this.lastData = null;
   }
-  
+
   convertChunk(geminiData) {
     const events = [];
     const candidate = geminiData.candidates?.[0];
     if (!candidate) return events;
-    
+
     // Send message_start and content_block_start on first chunk
     if (this.index === 0) {
       events.push({
@@ -260,7 +320,7 @@ class ClaudeStreamConverter {
           }
         }
       });
-      
+
       events.push({
         event: 'content_block_start',
         data: {
@@ -270,7 +330,7 @@ class ClaudeStreamConverter {
         }
       });
     }
-    
+
     // Send content_block_delta
     const text = candidate.content?.parts?.[0]?.text || '';
     if (text) {
@@ -283,18 +343,18 @@ class ClaudeStreamConverter {
         }
       });
     }
-    
+
     this.index++;
     this.lastData = geminiData;
     return events;
   }
-  
+
   finalize() {
     const events = [];
     if (this.lastData) {
       const candidate = this.lastData.candidates?.[0];
       const stopReason = mapFinishReason(candidate?.finishReason);
-      
+
       events.push({
         event: 'content_block_stop',
         data: {
@@ -302,7 +362,7 @@ class ClaudeStreamConverter {
           index: 0
         }
       });
-      
+
       events.push({
         event: 'message_delta',
         data: {
@@ -313,7 +373,7 @@ class ClaudeStreamConverter {
           }
         }
       });
-      
+
       events.push({
         event: 'message_stop',
         data: {
