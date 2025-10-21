@@ -9,6 +9,8 @@
 A proxy service that converts Gemini API to Claude API format, supporting Claude Code, Claude VS Plugin and other clients.
 This project works perfectly with Gemini-balance for ultimate free usage!
 
+![alt text](image\image.png)
+
 ## ✨ Features
 
 - 🔄 Complete API format conversion (Gemini ↔ Claude)

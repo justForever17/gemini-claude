@@ -257,14 +257,38 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
     console.log('Gemini URL:', geminiUrl.replace(/key=.+/, 'key=***'));
     
     // Forward to Gemini API (API key is in URL)
-    const response = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-client': 'genai-js/0.21.0'
-      },
-      body: JSON.stringify(geminiRequest)
-    });
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+      console.error('⏱️  Request timeout after 60 seconds');
+    }, 60000); // 60 second timeout
+    
+    let response;
+    try {
+      response = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-client': 'genai-js/0.21.0'
+        },
+        body: JSON.stringify(geminiRequest),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+    } catch (fetchError) {
+      clearTimeout(timeout);
+      if (fetchError.name === 'AbortError') {
+        console.error('❌ Request aborted due to timeout');
+        return res.status(504).json({
+          error: { 
+            type: 'timeout_error', 
+            message: 'Request to Gemini API timed out after 60 seconds'
+          }
+        });
+      }
+      throw fetchError;
+    }
     
     if (!response.ok) {
       const error = await response.text();
@@ -291,13 +315,36 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       
+      let chunkCount = 0;
+      let lastChunkTime = Date.now();
+      
       try {
         while (true) {
+          // Check for stream timeout (no data for 30 seconds)
+          if (Date.now() - lastChunkTime > 30000) {
+            console.error('⏱️  Stream timeout: no data received for 30 seconds');
+            res.write(formatClaudeSSE('error', {
+              type: 'stream_timeout',
+              message: 'Stream timed out waiting for data'
+            }));
+            res.end();
+            break;
+          }
+          
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log(`✅ Stream completed after ${chunkCount} chunks`);
+            break;
+          }
+          
+          chunkCount++;
+          lastChunkTime = Date.now();
           
           const chunk = decoder.decode(value, { stream: true });
+          console.log(`📦 Received chunk ${chunkCount} (${chunk.length} bytes)`);
+          
           const events = parser.parse(chunk);
+          console.log(`📊 Parsed ${events.length} events from chunk`);
           
           for (const geminiData of events) {
             const claudeEvents = converter.convertChunk(geminiData);
@@ -315,7 +362,12 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
         
         res.end();
       } catch (streamError) {
-        console.error('Stream error:', streamError);
+        console.error('❌ Stream error:', streamError);
+        console.error('Stack:', streamError.stack);
+        res.write(formatClaudeSSE('error', {
+          type: 'stream_error',
+          message: streamError.message
+        }));
         res.end();
       }
     } else {

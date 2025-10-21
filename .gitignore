@@ -27,6 +27,7 @@ npm-debug.log*
 
 # Kiro specs (local development only)
 .kiro/
+docs
 
 # OS
 .DS_Store

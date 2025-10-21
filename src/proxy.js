@@ -46,6 +46,14 @@ function buildGeminiUrl(config, stream) {
  * @returns {Object} Gemini API request object
  */
 function claudeToGeminiRequest(claudeRequest) {
+  // Log request overview
+  console.log('📨 Converting Claude request to Gemini format');
+  console.log(`  Model: ${claudeRequest.model || 'default'}`);
+  console.log(`  Messages: ${claudeRequest.messages?.length || 0}`);
+  console.log(`  Tools: ${claudeRequest.tools?.length || 0}`);
+  console.log(`  Max tokens: ${claudeRequest.max_tokens || 'default'}`);
+  console.log(`  Stream: ${claudeRequest.stream ? 'yes' : 'no'}`);
+
   const geminiRequest = {
     contents: [],
     safetySettings,
@@ -72,6 +80,20 @@ function claudeToGeminiRequest(claudeRequest) {
     }
   }
 
+  // Log message details
+  if (claudeRequest.messages && claudeRequest.messages.length > 0) {
+    console.log('💬 Converting messages:');
+    claudeRequest.messages.forEach((msg, index) => {
+      const contentTypes = Array.isArray(msg.content)
+        ? msg.content.map(b => b.type).join(', ')
+        : 'text';
+      const contentLength = Array.isArray(msg.content)
+        ? msg.content.length
+        : 1;
+      console.log(`  [${index}] ${msg.role}: ${contentLength} block(s) (${contentTypes})`);
+    });
+  }
+
   // Convert messages - merge consecutive messages with same role
   for (const msg of claudeRequest.messages || []) {
     const role = msg.role === 'assistant' ? 'model' : 'user';
@@ -88,6 +110,76 @@ function claudeToGeminiRequest(claudeRequest) {
             inlineData: {
               mimeType: block.source.media_type,
               data: block.source.data
+            }
+          });
+        } else if (block.type === 'tool_result') {
+          // Convert Claude tool_result to Gemini functionResponse
+          // Find the corresponding tool_use from previous messages to get the function name
+          let functionName = block.tool_use_id; // Fallback to ID
+          
+          // Search backwards through messages to find the tool_use with matching ID
+          for (let i = claudeRequest.messages.length - 1; i >= 0; i--) {
+            const prevMsg = claudeRequest.messages[i];
+            if (Array.isArray(prevMsg.content)) {
+              for (const prevBlock of prevMsg.content) {
+                if (prevBlock.type === 'tool_use' && prevBlock.id === block.tool_use_id) {
+                  functionName = prevBlock.name;
+                  break;
+                }
+              }
+            }
+            if (functionName !== block.tool_use_id) break;
+          }
+          
+          // Prepare response object
+          let response;
+          if (typeof block.content === 'string') {
+            response = { result: block.content };
+          } else if (typeof block.content === 'object' && block.content !== null) {
+            response = block.content;
+          } else {
+            // Handle unexpected content types
+            console.warn(`⚠️  Unexpected tool_result content type: ${typeof block.content}`);
+            response = { result: String(block.content) };
+          }
+          
+          // Handle error status
+          if (block.is_error) {
+            response.error = true;
+            response.error_message = typeof block.content === 'string' 
+              ? block.content 
+              : JSON.stringify(block.content);
+            console.warn(`⚠️  Tool execution failed: ${functionName} (${block.tool_use_id})`);
+            console.warn(`   Error: ${response.error_message.substring(0, 200)}${response.error_message.length > 200 ? '...' : ''}`);
+          }
+          
+          parts.push({
+            functionResponse: {
+              name: functionName,
+              response: response
+            }
+          });
+          
+          // Log successful conversion
+          if (!block.is_error) {
+            const contentSize = typeof block.content === 'string' 
+              ? block.content.length 
+              : JSON.stringify(block.content).length;
+            console.log(`🔧 Converted tool_result: ${block.tool_use_id} → ${functionName} (${contentSize} bytes)`);
+          }
+          
+          // Warn if function name wasn't found
+          if (functionName === block.tool_use_id) {
+            console.warn(`⚠️  Could not find function name for tool_use_id: ${block.tool_use_id}`);
+            console.warn(`   Using tool_use_id as fallback function name`);
+          }
+        } else if (block.type === 'tool_use') {
+          // Handle tool_use in assistant messages (for context)
+          // Gemini expects functionCall format
+          parts.push({
+            functionCall: {
+              name: block.name,
+              args: block.input || {}
             }
           });
         }
@@ -107,7 +199,22 @@ function claudeToGeminiRequest(claudeRequest) {
 
   // Map generation parameters
   if (claudeRequest.max_tokens) {
-    geminiRequest.generationConfig.maxOutputTokens = claudeRequest.max_tokens;
+    // Protect against unreasonably small max_tokens values
+    // Claude Code sometimes sends max_tokens: 1 which causes issues
+    const minTokens = 100; // Minimum reasonable token count
+    const defaultTokens = 4096; // Default if not specified or too small
+    
+    let maxTokens = claudeRequest.max_tokens;
+    
+    if (maxTokens < minTokens) {
+      console.warn(`⚠️  max_tokens (${maxTokens}) is too small, using default (${defaultTokens})`);
+      maxTokens = defaultTokens;
+    }
+    
+    geminiRequest.generationConfig.maxOutputTokens = maxTokens;
+  } else {
+    // If max_tokens not specified, use a reasonable default
+    geminiRequest.generationConfig.maxOutputTokens = 4096;
   }
   if (claudeRequest.temperature !== undefined) {
     geminiRequest.generationConfig.temperature = claudeRequest.temperature;
@@ -123,18 +230,17 @@ function claudeToGeminiRequest(claudeRequest) {
   }
 
   // Helper function: Recursively clean JSON Schema fields that Gemini doesn't support
-  function cleanJsonSchema(schema) {
+  function cleanJsonSchema(schema, depth = 0, path = '') {
     if (!schema || typeof schema !== 'object') {
       return schema;
     }
 
     // Handle arrays - recurse into each element
     if (Array.isArray(schema)) {
-      return schema.map(item => cleanJsonSchema(item));
+      return schema.map((item, index) => 
+        cleanJsonSchema(item, depth + 1, `${path}[${index}]`)
+      );
     }
-
-    // Create a clean copy
-    const cleaned = {};
 
     // List of JSON Schema fields that Gemini doesn't accept
     const unsupportedFields = [
@@ -151,102 +257,60 @@ function claudeToGeminiRequest(claudeRequest) {
       'exclusiveMinimum',
       'exclusiveMaximum',
       'multipleOf',
-      'pattern',
-      'format',
+      'pattern',      // 🔴 Critical: must be removed from all levels
+      'format',       // 🔴 Critical: must be removed from all levels
       'contentMediaType',
       'contentEncoding'
     ];
 
-    // Fields that contain schemas as object values (each value is a schema)
-    const schemaContainerFields = [
-      'properties',
-      'patternProperties',
-      'dependentSchemas'
-    ];
+    // Create a clean copy
+    const cleaned = {};
+    const removedFields = [];
 
-    // Fields that contain schema arrays
-    const schemaArrayFields = [
-      'anyOf',
-      'oneOf',
-      'allOf'
-    ];
-
-    // Fields that contain a single schema
-    const schemaSingleFields = [
-      'not',
-      'if',
-      'then',
-      'else',
-      'contains',
-      'propertyNames',
-      'additionalItems'
-    ];
-
-    // Copy supported fields and recursively clean nested schemas
+    // Process each field
     for (const [key, value] of Object.entries(schema)) {
+      const currentPath = path ? `${path}.${key}` : key;
+
       // Skip unsupported fields entirely
       if (unsupportedFields.includes(key)) {
+        removedFields.push(currentPath);
         continue;
       }
 
-      // Handle schema container fields (properties, patternProperties, etc.)
-      // These are objects where each value is a schema
-      if (schemaContainerFields.includes(key) && typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        cleaned[key] = {};
-        for (const [propKey, propValue] of Object.entries(value)) {
-          cleaned[key][propKey] = cleanJsonSchema(propValue);
-        }
-        continue;
-      }
-
-      // Handle schema array fields (anyOf, oneOf, allOf)
-      // These are arrays where each element is a schema
-      if (schemaArrayFields.includes(key) && Array.isArray(value)) {
-        cleaned[key] = value.map(item => cleanJsonSchema(item));
-        continue;
-      }
-
-      // Handle single schema fields (not, if, then, else, etc.)
-      // These contain a single schema object
-      if (schemaSingleFields.includes(key) && typeof value === 'object' && value !== null) {
-        cleaned[key] = cleanJsonSchema(value);
-        continue;
-      }
-
-      // Handle 'items' field specially - can be schema or array of schemas
-      if (key === 'items') {
-        if (Array.isArray(value)) {
-          cleaned[key] = value.map(item => cleanJsonSchema(item));
-        } else if (typeof value === 'object' && value !== null) {
-          cleaned[key] = cleanJsonSchema(value);
-        } else {
-          cleaned[key] = value;
-        }
-        continue;
-      }
-
-      // Handle 'dependencies' field - can contain schemas or string arrays
-      if (key === 'dependencies' && typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        cleaned[key] = {};
-        for (const [depKey, depValue] of Object.entries(value)) {
-          if (Array.isArray(depValue)) {
-            // Array of property names - keep as is
-            cleaned[key][depKey] = depValue;
-          } else if (typeof depValue === 'object' && depValue !== null) {
-            // Schema object - recurse
-            cleaned[key][depKey] = cleanJsonSchema(depValue);
-          } else {
-            cleaned[key][depKey] = depValue;
-          }
-        }
-        continue;
-      }
-
-      // For all other fields, recursively clean if object or array
+      // Recursively clean all nested objects and arrays
+      // This ensures that pattern/format in deeply nested properties are also removed
       if (typeof value === 'object' && value !== null) {
-        cleaned[key] = cleanJsonSchema(value);
+        cleaned[key] = cleanJsonSchema(value, depth + 1, currentPath);
       } else {
         cleaned[key] = value;
+      }
+    }
+
+    // Clean up 'required' array to only include properties that still exist
+    if (cleaned.required && Array.isArray(cleaned.required) && cleaned.properties) {
+      const validProperties = Object.keys(cleaned.properties);
+      const originalRequired = cleaned.required;
+      cleaned.required = cleaned.required.filter(prop => validProperties.includes(prop));
+      
+      // Log if we removed any required properties
+      if (cleaned.required.length < originalRequired.length) {
+        const removed = originalRequired.filter(prop => !cleaned.required.includes(prop));
+        console.log(`🧹 Cleaned 'required' array: removed ${removed.length} reference(s) to deleted properties: ${removed.join(', ')}`);
+      }
+      
+      // Remove empty required array
+      if (cleaned.required.length === 0) {
+        delete cleaned.required;
+      }
+    }
+
+    // Log removed fields at root level only
+    if (depth === 0 && removedFields.length > 0) {
+      console.log(`🧹 Cleaned schema: removed ${removedFields.length} unsupported field(s)`);
+      if (removedFields.length <= 10) {
+        removedFields.forEach(field => console.log(`   - ${field}`));
+      } else {
+        console.log(`   - ${removedFields.slice(0, 10).join(', ')} ... and ${removedFields.length - 10} more`);
       }
     }
 
@@ -322,6 +386,11 @@ function claudeToGeminiRequest(claudeRequest) {
 
   // Convert Claude tools to Gemini function declarations
   if (claudeRequest.tools && Array.isArray(claudeRequest.tools)) {
+    console.log(`🔧 Converting ${claudeRequest.tools.length} tool(s):`);
+    claudeRequest.tools.forEach((tool, index) => {
+      console.log(`  [${index}] ${tool.name}`);
+    });
+
     const functionDeclarations = claudeRequest.tools.map((tool, index) => {
       // Recursively clean the entire input_schema tree
       const cleanedSchema = tool.input_schema
@@ -330,12 +399,6 @@ function claudeToGeminiRequest(claudeRequest) {
 
       // Validate that cleaning was successful
       validateCleanedSchema(cleanedSchema, tool.name, index);
-
-      // Debug logging for problematic tools (based on error log)
-      const problematicIndices = [10, 14, 26, 55, 57, 62];
-      if (problematicIndices.includes(index)) {
-        console.log(`🔍 Tool[${index}] "${tool.name}" - Schema cleaned and validated`);
-      }
 
       return {
         name: tool.name,
@@ -458,7 +521,7 @@ class ClaudeStreamConverter {
     const candidate = geminiData.candidates?.[0];
     if (!candidate) return events;
 
-    // Send message_start and content_block_start on first chunk
+    // Send message_start on first chunk
     if (this.index === 0) {
       events.push({
         event: 'message_start',
@@ -474,29 +537,78 @@ class ClaudeStreamConverter {
           }
         }
       });
-
-      events.push({
-        event: 'content_block_start',
-        data: {
-          type: 'content_block_start',
-          index: 0,
-          content_block: { type: 'text', text: '' }
-        }
-      });
     }
 
-    // Send content_block_delta
-    const text = candidate.content?.parts?.[0]?.text || '';
-    if (text) {
-      events.push({
-        event: 'content_block_delta',
-        data: {
-          type: 'content_block_delta',
-          index: 0,
-          delta: { type: 'text_delta', text }
+    // Process each part in the response
+    const parts = candidate.content?.parts || [];
+    parts.forEach((part, partIndex) => {
+      // Handle text content
+      if (part.text) {
+        // Send content_block_start for text on first occurrence
+        if (this.index === 0 && partIndex === 0) {
+          events.push({
+            event: 'content_block_start',
+            data: {
+              type: 'content_block_start',
+              index: partIndex,
+              content_block: { type: 'text', text: '' }
+            }
+          });
         }
-      });
-    }
+
+        // Send text delta
+        events.push({
+          event: 'content_block_delta',
+          data: {
+            type: 'content_block_delta',
+            index: partIndex,
+            delta: { type: 'text_delta', text: part.text }
+          }
+        });
+      }
+      
+      // Handle function call (tool use)
+      else if (part.functionCall) {
+        // Send content_block_start for tool_use
+        events.push({
+          event: 'content_block_start',
+          data: {
+            type: 'content_block_start',
+            index: partIndex,
+            content_block: {
+              type: 'tool_use',
+              id: `toolu_${Math.random().toString(36).substring(2, 15)}`,
+              name: part.functionCall.name,
+              input: {}
+            }
+          }
+        });
+
+        // Send input delta
+        events.push({
+          event: 'content_block_delta',
+          data: {
+            type: 'content_block_delta',
+            index: partIndex,
+            delta: {
+              type: 'input_json_delta',
+              partial_json: JSON.stringify(part.functionCall.args || {})
+            }
+          }
+        });
+
+        // Send content_block_stop for tool_use
+        events.push({
+          event: 'content_block_stop',
+          data: {
+            type: 'content_block_stop',
+            index: partIndex
+          }
+        });
+
+        console.log(`🔧 Streaming tool_use: ${part.functionCall.name}`);
+      }
+    });
 
     this.index++;
     this.lastData = geminiData;

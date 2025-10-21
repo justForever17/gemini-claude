@@ -9,7 +9,7 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY}
 
 # 可选：使用国内镜像加速（取消注释以启用）
-# RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 # Create app directory
 WORKDIR /app
@@ -27,7 +27,7 @@ COPY package*.json ./
 
 # Install production dependencies
 # 可选：使用国内 npm 镜像（取消注释以启用）
-# RUN npm config set registry https://registry.npmmirror.com
+RUN npm config set registry https://registry.npmmirror.com
 RUN npm ci --only=production --timeout=600000
 
 # Copy source code
