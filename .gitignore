@@ -25,6 +25,9 @@ npm-debug.log*
 *.swo
 *~
 
+# Kiro specs (local development only)
+.kiro/
+
 # OS
 .DS_Store
 Thumbs.db

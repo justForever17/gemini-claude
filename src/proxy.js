@@ -128,7 +128,7 @@ function claudeToGeminiRequest(claudeRequest) {
       return schema;
     }
 
-    // Handle arrays
+    // Handle arrays - recurse into each element
     if (Array.isArray(schema)) {
       return schema.map(item => cleanJsonSchema(item));
     }
@@ -157,14 +157,92 @@ function claudeToGeminiRequest(claudeRequest) {
       'contentEncoding'
     ];
 
-    // Copy supported fields and recursively clean nested objects
+    // Fields that contain schemas as object values (each value is a schema)
+    const schemaContainerFields = [
+      'properties',
+      'patternProperties',
+      'dependentSchemas'
+    ];
+
+    // Fields that contain schema arrays
+    const schemaArrayFields = [
+      'anyOf',
+      'oneOf',
+      'allOf'
+    ];
+
+    // Fields that contain a single schema
+    const schemaSingleFields = [
+      'not',
+      'if',
+      'then',
+      'else',
+      'contains',
+      'propertyNames',
+      'additionalItems'
+    ];
+
+    // Copy supported fields and recursively clean nested schemas
     for (const [key, value] of Object.entries(schema)) {
-      // Skip unsupported fields
+      // Skip unsupported fields entirely
       if (unsupportedFields.includes(key)) {
         continue;
       }
 
-      // Recursively clean nested objects and arrays
+      // Handle schema container fields (properties, patternProperties, etc.)
+      // These are objects where each value is a schema
+      if (schemaContainerFields.includes(key) && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        cleaned[key] = {};
+        for (const [propKey, propValue] of Object.entries(value)) {
+          cleaned[key][propKey] = cleanJsonSchema(propValue);
+        }
+        continue;
+      }
+
+      // Handle schema array fields (anyOf, oneOf, allOf)
+      // These are arrays where each element is a schema
+      if (schemaArrayFields.includes(key) && Array.isArray(value)) {
+        cleaned[key] = value.map(item => cleanJsonSchema(item));
+        continue;
+      }
+
+      // Handle single schema fields (not, if, then, else, etc.)
+      // These contain a single schema object
+      if (schemaSingleFields.includes(key) && typeof value === 'object' && value !== null) {
+        cleaned[key] = cleanJsonSchema(value);
+        continue;
+      }
+
+      // Handle 'items' field specially - can be schema or array of schemas
+      if (key === 'items') {
+        if (Array.isArray(value)) {
+          cleaned[key] = value.map(item => cleanJsonSchema(item));
+        } else if (typeof value === 'object' && value !== null) {
+          cleaned[key] = cleanJsonSchema(value);
+        } else {
+          cleaned[key] = value;
+        }
+        continue;
+      }
+
+      // Handle 'dependencies' field - can contain schemas or string arrays
+      if (key === 'dependencies' && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        cleaned[key] = {};
+        for (const [depKey, depValue] of Object.entries(value)) {
+          if (Array.isArray(depValue)) {
+            // Array of property names - keep as is
+            cleaned[key][depKey] = depValue;
+          } else if (typeof depValue === 'object' && depValue !== null) {
+            // Schema object - recurse
+            cleaned[key][depKey] = cleanJsonSchema(depValue);
+          } else {
+            cleaned[key][depKey] = depValue;
+          }
+        }
+        continue;
+      }
+
+      // For all other fields, recursively clean if object or array
       if (typeof value === 'object' && value !== null) {
         cleaned[key] = cleanJsonSchema(value);
       } else {
@@ -175,13 +253,89 @@ function claudeToGeminiRequest(claudeRequest) {
     return cleaned;
   }
 
+  // Helper function: Validate that cleaned schema has no unsupported fields
+  function validateCleanedSchema(schema, toolName, toolIndex) {
+    if (!schema || typeof schema !== 'object') {
+      return true;
+    }
+
+    const unsupportedFields = [
+      'additionalProperties',
+      '$schema',
+      '$id',
+      '$ref',
+      'definitions',
+      'title',
+      'examples',
+      'default',
+      'readOnly',
+      'writeOnly',
+      'exclusiveMinimum',
+      'exclusiveMaximum',
+      'multipleOf',
+      'pattern',
+      'format',
+      'contentMediaType',
+      'contentEncoding'
+    ];
+
+    // Deep search for unsupported fields
+    function findUnsupportedFields(obj, path = '') {
+      const found = [];
+
+      if (!obj || typeof obj !== 'object') {
+        return found;
+      }
+
+      if (Array.isArray(obj)) {
+        obj.forEach((item, index) => {
+          found.push(...findUnsupportedFields(item, `${path}[${index}]`));
+        });
+        return found;
+      }
+
+      for (const [key, value] of Object.entries(obj)) {
+        const currentPath = path ? `${path}.${key}` : key;
+
+        if (unsupportedFields.includes(key)) {
+          found.push(currentPath);
+        }
+
+        if (typeof value === 'object' && value !== null) {
+          found.push(...findUnsupportedFields(value, currentPath));
+        }
+      }
+
+      return found;
+    }
+
+    const foundFields = findUnsupportedFields(schema);
+
+    if (foundFields.length > 0) {
+      console.warn(`⚠️  Tool[${toolIndex}] "${toolName}" still contains unsupported fields after cleaning:`);
+      foundFields.forEach(field => console.warn(`   - ${field}`));
+      return false;
+    }
+
+    return true;
+  }
+
   // Convert Claude tools to Gemini function declarations
   if (claudeRequest.tools && Array.isArray(claudeRequest.tools)) {
-    const functionDeclarations = claudeRequest.tools.map(tool => {
+    const functionDeclarations = claudeRequest.tools.map((tool, index) => {
       // Recursively clean the entire input_schema tree
       const cleanedSchema = tool.input_schema
         ? cleanJsonSchema(tool.input_schema)
         : {};
+
+      // Validate that cleaning was successful
+      validateCleanedSchema(cleanedSchema, tool.name, index);
+
+      // Debug logging for problematic tools (based on error log)
+      const problematicIndices = [10, 14, 26, 55, 57, 62];
+      if (problematicIndices.includes(index)) {
+        console.log(`🔍 Tool[${index}] "${tool.name}" - Schema cleaned and validated`);
+      }
 
       return {
         name: tool.name,
