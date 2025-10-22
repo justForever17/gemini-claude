@@ -320,7 +320,7 @@ docker logs -f gemini-claude-proxy
 
 ## 📄 许可证
 
-MIT License
+[MIT License](License)
 
 ## 🔗 相关链接
 

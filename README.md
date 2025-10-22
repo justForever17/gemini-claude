@@ -319,7 +319,7 @@ Issues and Pull Requests are welcome!
 
 ## 📄 License
 
-MIT License
+[MIT License](License)
 
 ## 🔗 Related Links
 
