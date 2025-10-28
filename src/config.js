@@ -106,6 +106,20 @@ function validateConfig(config) {
     validated.version = '1.0.0';
   }
 
+  // Add MCP servers configuration
+  if (!validated.mcpServers) {
+    validated.mcpServers = [];
+  }
+
+  // Add Gemini-specific MCP settings
+  if (!validated.geminiMcpSettings) {
+    validated.geminiMcpSettings = {
+      maxConcurrentCalls: 1, // Gemini 2.5 limitation
+      timeoutMs: 30000,
+      retryAttempts: 3
+    };
+  }
+
   // Validate URL format
   if (validated.geminiApiUrl && !validateUrl(validated.geminiApiUrl)) {
     throw new Error('Invalid Gemini API URL format. Must use https://');

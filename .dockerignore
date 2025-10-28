@@ -11,10 +11,14 @@ data
 # Documentation
 *.md
 !README.md
+!README_CN.md
 
 # Test files
 test-*
 *.test.js
+analyze-*
+monitor-*
+cleanup-*
 
 # IDE
 .vscode
@@ -37,6 +41,14 @@ logs
 # Temporary files
 *.tmp
 *.temp
+*.backup
+
+# Kiro and Claude
+.kiro
+.claude
+
+# Logs
+logs
 
 # Docker
 Dockerfile

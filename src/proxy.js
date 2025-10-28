@@ -1,7 +1,7 @@
 /**
  * API Conversion Module
  * Handles conversion between Claude and Gemini API formats
- * 
+ *
  * Key conversions:
  * - Claude messages → Gemini contents (role mapping: assistant→model, user→user)
  * - Claude system → Gemini system_instruction
@@ -10,6 +10,12 @@
  * - Gemini finishReason → Claude stop_reason
  * - SSE streaming format conversion
  */
+
+// Import MCP integration
+const { MCPIntegration } = require('./mcp-integration');
+
+// Global MCP integration instance
+let mcpIntegration = null;
 
 // Safety settings for Gemini API - disable all content filtering
 const safetySettings = [
@@ -178,14 +184,28 @@ function claudeToGeminiRequest(claudeRequest) {
             console.warn(`   Using tool_use_id as fallback function name`);
           }
         } else if (block.type === 'tool_use') {
-          // Handle tool_use in assistant messages (for context)
-          // Gemini expects functionCall format
-          parts.push({
-            functionCall: {
-              name: block.name,
-              args: block.input || {}
-            }
-          });
+          // Check if this is an MCP tool call
+          if (mcpIntegration && mcpIntegration.isMcpTool(block.name)) {
+            // Handle MCP tool use - defer execution
+            console.log(`🔧 Detected MCP tool use: ${block.name}`);
+            // For now, just convert to Gemini format
+            // Actual execution will be handled separately
+            parts.push({
+              functionCall: {
+                name: block.name,
+                args: block.input || {}
+              }
+            });
+          } else {
+            // Handle native tool_use in assistant messages (for context)
+            // Gemini expects functionCall format
+            parts.push({
+              functionCall: {
+                name: block.name,
+                args: block.input || {}
+              }
+            });
+          }
         }
       }
     }
@@ -388,21 +408,48 @@ function claudeToGeminiRequest(claudeRequest) {
     return true;
   }
 
-  // Convert Claude tools to Gemini function declarations
+  // Merge MCP tools with Claude tools
+  const allTools = [];
+
+  // Add MCP tools if integration is available
+  if (mcpIntegration && mcpIntegration.initialized) {
+    const mcpTools = mcpIntegration.getClaudeTools();
+    allTools.push(...mcpTools);
+    console.log(`🔧 Adding ${mcpTools.length} MCP tool(s) to request`);
+  }
+
+  // Add Claude native tools
   if (claudeRequest.tools && Array.isArray(claudeRequest.tools)) {
-    console.log(`🔧 Converting ${claudeRequest.tools.length} tool(s):`);
-    claudeRequest.tools.forEach((tool, index) => {
+    allTools.push(...claudeRequest.tools);
+    console.log(`🔧 Adding ${claudeRequest.tools.length} native tool(s) to request`);
+  }
+
+  // Convert all tools to Gemini function declarations
+  if (allTools.length > 0) {
+    console.log(`🔧 Converting ${allTools.length} total tool(s) to Gemini format:`);
+    allTools.forEach((tool, index) => {
       console.log(`  [${index}] ${tool.name}`);
     });
 
-    const functionDeclarations = claudeRequest.tools.map((tool, index) => {
-      // Recursively clean the entire input_schema tree
-      const cleanedSchema = tool.input_schema
-        ? cleanJsonSchema(tool.input_schema)
-        : {};
+    const functionDeclarations = allTools.map((tool, index) => {
+      // Skip MCP tools in schema cleaning (they're already cleaned)
+      const isMcpTool = mcpIntegration && mcpIntegration.isMcpTool(tool.name);
 
-      // Validate that cleaning was successful
-      validateCleanedSchema(cleanedSchema, tool.name, index);
+      let cleanedSchema = {};
+      if (tool.input_schema) {
+        if (isMcpTool) {
+          // MCP tools already have cleaned schema
+          cleanedSchema = tool.input_schema;
+        } else {
+          // Clean native Claude tools
+          cleanedSchema = cleanJsonSchema(tool.input_schema);
+        }
+      }
+
+      // Validate that cleaning was successful (only for non-MCP tools)
+      if (!isMcpTool) {
+        validateCleanedSchema(cleanedSchema, tool.name, index);
+      }
 
       return {
         name: tool.name,
@@ -419,6 +466,31 @@ function claudeToGeminiRequest(claudeRequest) {
   }
 
   return geminiRequest;
+}
+
+/**
+ * Initialize MCP integration
+ */
+async function initializeMCP(config) {
+  if (!mcpIntegration) {
+    try {
+      console.log('🚀 初始化MCP集成...');
+
+      // Get MCP server configurations from config
+      const mcpServers = config.mcpServers || [];
+
+      mcpIntegration = new MCPIntegration(config);
+      await mcpIntegration.initialize(mcpServers);
+
+      console.log('✅ MCP集成初始化完成');
+      return mcpIntegration;
+    } catch (error) {
+      console.error('❌ MCP集成初始化失败:', error);
+      mcpIntegration = null;
+      throw error;
+    }
+  }
+  return null;
 }
 
 // Generate Claude-style message ID
@@ -668,5 +740,7 @@ module.exports = {
   mapFinishReason,
   GeminiStreamParser,
   ClaudeStreamConverter,
-  formatClaudeSSE
+  formatClaudeSSE,
+  initializeMCP,
+  getMCPIntegration: () => mcpIntegration
 };

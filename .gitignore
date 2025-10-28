@@ -37,15 +37,38 @@ Thumbs.db
 test-*.js
 test-*.json
 test-*.md
+*test*.js
+analyze-*.js
+monitor-*.js
+cleanup-*.js
+TEST-GUIDE.md
 
 # Temporary files
 *.tmp
 *.temp
 *.vue
+*.backup
 
-# Documentation (keep only README.md)
+# Documentation (keep only README.md and README_CN.md)
+docs/
 *-FIX.md
 *-TROUBLESHOOTING.md
 *-SUCCESS.md
 *-READY.md
+*-ANALYSIS.md
+*-PROBLEM.md
+*-SOLUTION.md
+*-STRATEGY.md
+*-COMPARISON.md
+*-GUIDE.md
+*-CHECKLIST.md
 FINAL-CONFIGURATION.md
+OPTIMIZATION-GUIDE.md
+GITHUB-UPLOAD-CHECKLIST.md
+
+# Jest
+/coverage
+.jest-cache
+
+# Claude Code
+.claude/
