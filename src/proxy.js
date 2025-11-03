@@ -31,13 +31,18 @@ const safetySettings = [
 
 /**
  * Build complete Gemini API endpoint URL with API key
- * @param {Object} config - Configuration object with geminiApiUrl, geminiModelName, and geminiApiKey
+ * @param {Object} config - Configuration object with geminiApiUrl, defaultGeminiModel, and geminiApiKey
  * @param {boolean} stream - Whether this is a streaming request
+ * @param {string} requestedModel - Model name from the request (optional)
  * @returns {string} Complete API endpoint URL with key parameter
  */
-function buildGeminiUrl(config, stream) {
-  const { geminiApiUrl, geminiModelName, geminiApiKey } = config;
-  let url = `${geminiApiUrl}/models/${geminiModelName}:`;
+function buildGeminiUrl(config, stream, requestedModel) {
+  const { geminiApiUrl, defaultGeminiModel, geminiApiKey } = config;
+  const modelName = requestedModel || defaultGeminiModel || 'gemini-2.5-flash';
+  
+  console.log(`🎯 Using Gemini model: ${modelName}${requestedModel ? ' (from request)' : ' (default)'}`);
+  
+  let url = `${geminiApiUrl}/models/${modelName}:`;
   url += stream ? 'streamGenerateContent' : 'generateContent';
   url += `?key=${geminiApiKey}`;
   if (stream) {
@@ -266,8 +271,9 @@ function claudeToGeminiRequest(claudeRequest) {
       );
     }
 
-    // List of JSON Schema fields that Gemini doesn't accept
+    // Comprehensive list of JSON Schema fields that Gemini doesn't accept
     const unsupportedFields = [
+      // JSON Schema metadata
       'additionalProperties',
       '$schema',
       '$id',
@@ -276,15 +282,45 @@ function claudeToGeminiRequest(claudeRequest) {
       'title',
       'examples',
       'default',
+      
+      // Access control
       'readOnly',
       'writeOnly',
+      
+      // Numeric constraints
       'exclusiveMinimum',
       'exclusiveMaximum',
+      'minimum',
+      'maximum',
       'multipleOf',
-      'pattern',      // 🔴 Critical: must be removed from all levels
-      'format',       // 🔴 Critical: must be removed from all levels
+      
+      // String constraints
+      'pattern',
+      'format',
+      'minLength',
+      'maxLength',
+      
+      // Array constraints
+      'minItems',
+      'maxItems',
+      'uniqueItems',
+      
+      // Object constraints
+      'minProperties',
+      'maxProperties',
+      'patternProperties',
+      'dependencies',
+      
+      // Content-related
       'contentMediaType',
-      'contentEncoding'
+      'contentEncoding',
+      
+      // Additional constraints
+      'const',
+      'allOf',
+      'anyOf',
+      'oneOf',
+      'not'
     ];
 
     // Create a clean copy
@@ -347,6 +383,7 @@ function claudeToGeminiRequest(claudeRequest) {
       return true;
     }
 
+    // Must match the list in cleanJsonSchema
     const unsupportedFields = [
       'additionalProperties',
       '$schema',
@@ -360,11 +397,27 @@ function claudeToGeminiRequest(claudeRequest) {
       'writeOnly',
       'exclusiveMinimum',
       'exclusiveMaximum',
+      'minimum',
+      'maximum',
       'multipleOf',
       'pattern',
       'format',
+      'minLength',
+      'maxLength',
+      'minItems',
+      'maxItems',
+      'uniqueItems',
+      'minProperties',
+      'maxProperties',
+      'patternProperties',
+      'dependencies',
       'contentMediaType',
-      'contentEncoding'
+      'contentEncoding',
+      'const',
+      'allOf',
+      'anyOf',
+      'oneOf',
+      'not'
     ];
 
     // Deep search for unsupported fields
@@ -424,8 +477,21 @@ function claudeToGeminiRequest(claudeRequest) {
     console.log(`🔧 Adding ${claudeRequest.tools.length} native tool(s) to request`);
   }
 
+  // Check if the request contains any functionResponse (tool_result)
+  // Gemini doesn't allow tools definition when functionResponse is present
+  const hasFunctionResponse = geminiRequest.contents.some(content => 
+    content.parts && content.parts.some(part => part.functionResponse)
+  );
+
+  if (hasFunctionResponse && allTools.length > 0) {
+    console.log(`⚠️  Skipping tools definition: Request contains functionResponse`);
+    console.log(`   Gemini API limitation: Cannot send tools with function responses`);
+    console.log(`   This is normal for tool result submissions`);
+  }
+
   // Convert all tools to Gemini function declarations
-  if (allTools.length > 0) {
+  // BUT: Skip if request contains functionResponse (Gemini limitation)
+  if (allTools.length > 0 && !hasFunctionResponse) {
     console.log(`🔧 Converting ${allTools.length} total tool(s) to Gemini format:`);
     allTools.forEach((tool, index) => {
       console.log(`  [${index}] ${tool.name}`);
@@ -437,30 +503,51 @@ function claudeToGeminiRequest(claudeRequest) {
 
       let cleanedSchema = {};
       if (tool.input_schema) {
+        const originalSize = JSON.stringify(tool.input_schema).length;
+
         if (isMcpTool) {
           // MCP tools already have cleaned schema
           cleanedSchema = tool.input_schema;
+          console.log(`  ✓ [${index}] ${tool.name}: MCP tool (pre-cleaned)`);
         } else {
           // Clean native Claude tools
           cleanedSchema = cleanJsonSchema(tool.input_schema);
+          const cleanedSize = JSON.stringify(cleanedSchema).length;
+          const reduction = originalSize - cleanedSize;
+
+          if (reduction > 0) {
+            console.log(`  🧹 [${index}] ${tool.name}: Cleaned ${reduction} bytes (${originalSize} → ${cleanedSize})`);
+          } else {
+            console.log(`  ✓ [${index}] ${tool.name}: No cleaning needed`);
+          }
         }
       }
 
       // Validate that cleaning was successful (only for non-MCP tools)
       if (!isMcpTool) {
-        validateCleanedSchema(cleanedSchema, tool.name, index);
+        const isValid = validateCleanedSchema(cleanedSchema, tool.name, index);
+        if (!isValid) {
+          console.error(`  ❌ [${index}] ${tool.name}: Validation failed - may cause Gemini errors`);
+        }
       }
 
-      return {
+      // Ensure proper Gemini function declaration format
+      const functionDeclaration = {
         name: tool.name,
-        description: tool.description || '',
-        parameters: cleanedSchema
+        description: tool.description || ''
       };
+
+      // Only include parameters if they exist and are not empty
+      if (cleanedSchema && Object.keys(cleanedSchema).length > 0) {
+        functionDeclaration.parameters = cleanedSchema;
+      }
+
+      return functionDeclaration;
     });
 
     if (functionDeclarations.length > 0) {
       geminiRequest.tools = [{
-        function_declarations: functionDeclarations
+        functionDeclarations: functionDeclarations
       }];
     }
   }

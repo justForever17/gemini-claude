@@ -45,7 +45,7 @@ services:
 # 2. 先拉取基础镜像
 #    docker pull node:20-alpine
 #
-# 3. 编辑 Dockerfile，取消注释第 10 行和第 25 行（使用国内源）
+# 3. 编辑 Dockerfile，取消注释第 10 行和第 25 行（使用国内源，已取消注释）
 #
 # 4. 构建并启动
 #    docker compose build --no-cache

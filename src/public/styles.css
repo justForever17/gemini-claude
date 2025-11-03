@@ -227,6 +227,10 @@ body {
   display: block;
 }
 
+.hidden {
+  display: none;
+}
+
 .form-hint {
   display: block;
   font-size: 12px;

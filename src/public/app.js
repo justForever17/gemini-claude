@@ -61,8 +61,8 @@ loginForm.addEventListener('submit', async (e) => {
     
     if (response.ok) {
       sessionToken = data.token;
-      loginCard.style.display = 'none';
-      configCard.style.display = 'block';
+      loginCard.classList.add('hidden');
+      configCard.classList.remove('hidden');
       loadConfiguration();
     } else {
       showError(loginError, data.error?.message || 'Login failed');
@@ -83,7 +83,7 @@ async function loadConfiguration() {
       const config = await response.json();
       document.getElementById('geminiApiUrl').value = config.geminiApiUrl || '';
       document.getElementById('geminiApiKey').value = config.geminiApiKey || '';
-      document.getElementById('geminiModelName').value = config.geminiModelName || 'gemini-2.5-flash';
+      document.getElementById('defaultGeminiModel').value = config.defaultGeminiModel || 'gemini-2.5-flash';
       document.getElementById('localApiKey').value = config.localApiKey || '';
       
       // Update Claude API URL display
@@ -103,7 +103,7 @@ configForm.addEventListener('submit', async (e) => {
   const config = {
     geminiApiUrl: document.getElementById('geminiApiUrl').value,
     geminiApiKey: document.getElementById('geminiApiKey').value,
-    geminiModelName: document.getElementById('geminiModelName').value
+    defaultGeminiModel: document.getElementById('defaultGeminiModel').value
   };
   
   try {
@@ -217,8 +217,8 @@ document.getElementById('changePasswordBtn').addEventListener('click', async () 
       showSuccess(configSuccess, 'Password changed successfully. Please login again.');
       setTimeout(() => {
         sessionToken = null;
-        configCard.style.display = 'none';
-        loginCard.style.display = 'block';
+        configCard.classList.add('hidden');
+        loginCard.classList.remove('hidden');
         document.getElementById('loginPassword').value = '';
         document.getElementById('currentPassword').value = '';
         document.getElementById('newPassword').value = '';
@@ -234,8 +234,8 @@ document.getElementById('changePasswordBtn').addEventListener('click', async () 
 // Logout
 logoutBtn.addEventListener('click', () => {
   sessionToken = null;
-  configCard.style.display = 'none';
-  loginCard.style.display = 'block';
+  configCard.classList.add('hidden');
+  loginCard.classList.remove('hidden');
   document.getElementById('loginPassword').value = '';
 });
 

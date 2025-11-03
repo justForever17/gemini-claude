@@ -13,6 +13,7 @@ data/config.json
 logs/
 *.log
 npm-debug.log*
+cs/
 
 # Environment
 .env

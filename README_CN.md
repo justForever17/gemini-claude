@@ -18,6 +18,10 @@
 - 🔄 完整的 API 格式转换（Gemini ↔ Claude）
 - 🌊 支持流式响应（SSE）
 - 🎯 完全兼容 Claude Code / VS Plugin
+- 🔧 **完整的工具调用支持**（Function Calling / Tool Use）
+  - 自动清理 Gemini 不支持的 JSON Schema 字段
+  - 智能转换 Claude 工具格式到 Gemini 函数声明
+  - 支持复杂嵌套工具定义
 - 🔐 API Key 认证
 - 🎨 Web 管理界面
 - 🐳 Docker 一键部署

@@ -36,7 +36,7 @@ function loadConfig() {
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123',
     geminiApiUrl: process.env.GEMINI_API_URL || '',
     geminiApiKey: process.env.GEMINI_API_KEY || '',
-    geminiModelName: process.env.GEMINI_MODEL_NAME || 'gemini-2.5-flash',
+    defaultGeminiModel: process.env.DEFAULT_GEMINI_MODEL || 'gemini-2.5-flash',
     localApiKey: generateApiKey(),
     version: '1.0.0'
   };
@@ -98,8 +98,8 @@ function validateConfig(config) {
     validated.localApiKey = generateApiKey();
   }
 
-  if (!validated.geminiModelName) {
-    validated.geminiModelName = 'gemini-2.5-flash';
+  if (!validated.defaultGeminiModel) {
+    validated.defaultGeminiModel = 'gemini-2.5-flash';
   }
 
   if (!validated.version) {

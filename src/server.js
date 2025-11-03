@@ -232,7 +232,7 @@ app.post('/api/test-connection', requireSession, async (req, res) => {
       return res.json({ connected: false, error: 'API URL or key not configured' });
     }
     
-    const testUrl = `${config.geminiApiUrl}/models/${config.geminiModelName}:generateContent?key=${config.geminiApiKey}`;
+    const testUrl = `${config.geminiApiUrl}/models/${config.defaultGeminiModel}:generateContent?key=${config.geminiApiKey}`;
     
     const response = await fetch(testUrl, {
       method: 'POST',
@@ -364,7 +364,7 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
     // 使用队列处理请求
     await queue.add(async () => {
       const geminiRequest = claudeToGeminiRequest(claudeRequest);
-      const geminiUrl = buildGeminiUrl(config, isStreaming);
+      const geminiUrl = buildGeminiUrl(config, isStreaming, claudeRequest.model);
       
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
@@ -397,6 +397,38 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
         stats.errors++;
         const error = await response.text();
         console.error(`❌ Gemini API 错误 [${response.status}]:`, error);
+        
+        // 如果是 500 错误且有工具定义，记录详细信息以便调试
+        if (response.status === 500 && geminiRequest.tools) {
+          console.error('🔍 Request contained tools - dumping for debugging:');
+          console.error('   Tool count:', geminiRequest.tools[0]?.function_declarations?.length || 0);
+          
+          // 记录每个工具的名称和参数结构
+          if (geminiRequest.tools[0]?.function_declarations) {
+            geminiRequest.tools[0].function_declarations.forEach((tool, idx) => {
+              console.error(`   [${idx}] ${tool.name}:`);
+              console.error(`       Parameters keys: ${Object.keys(tool.parameters || {}).join(', ')}`);
+              
+              // 检查是否还有不支持的字段
+              const paramStr = JSON.stringify(tool.parameters);
+              const suspiciousFields = [
+                'additionalProperties', '$schema', 'format', 'pattern',
+                'minLength', 'maxLength', 'minItems', 'maxItems'
+              ];
+              const found = suspiciousFields.filter(field => paramStr.includes(`"${field}"`));
+              if (found.length > 0) {
+                console.error(`       ⚠️  Suspicious fields found: ${found.join(', ')}`);
+              }
+            });
+          }
+          
+          // 如果工具数量较少，记录完整的工具定义
+          if (geminiRequest.tools[0]?.function_declarations?.length <= 3) {
+            console.error('   Full tools definition:');
+            console.error(JSON.stringify(geminiRequest.tools, null, 2));
+          }
+        }
+        
         return res.status(502).json({
           error: { 
             type: 'upstream_error', 
@@ -413,7 +445,7 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
         res.setHeader('anthropic-version', '2023-06-01');
         
         const parser = new GeminiStreamParser();
-        const converter = new ClaudeStreamConverter(claudeRequest.model || 'claude-3-5-sonnet-20241022', messageId);
+        const converter = new ClaudeStreamConverter(claudeRequest.model || config.defaultGeminiModel || 'gemini-2.5-flash', messageId);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         
@@ -451,7 +483,7 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
         const geminiResponse = await response.json();
         const claudeResponse = geminiToClaudeResponse(
           geminiResponse, 
-          claudeRequest.model || 'claude-3-5-sonnet-20241022',
+          claudeRequest.model || config.defaultGeminiModel || 'gemini-2.5-flash',
           messageId
         );
         
