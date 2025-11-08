@@ -39,9 +39,9 @@ const safetySettings = [
 function buildGeminiUrl(config, stream, requestedModel) {
   const { geminiApiUrl, defaultGeminiModel, geminiApiKey } = config;
   const modelName = requestedModel || defaultGeminiModel || 'gemini-2.5-flash';
-  
+
   console.log(`🎯 Using Gemini model: ${modelName}${requestedModel ? ' (from request)' : ' (default)'}`);
-  
+
   let url = `${geminiApiUrl}/models/${modelName}:`;
   url += stream ? 'streamGenerateContent' : 'generateContent';
   url += `?key=${geminiApiKey}`;
@@ -126,8 +126,8 @@ function claudeToGeminiRequest(claudeRequest) {
         } else if (block.type === 'tool_result') {
           // Convert Claude tool_result to Gemini functionResponse
           // Find the corresponding tool_use from previous messages to get the function name
-          let functionName = block.tool_use_id; // Fallback to ID
-          
+          let functionName = null;
+
           // Search backwards through messages to find the tool_use with matching ID
           for (let i = claudeRequest.messages.length - 1; i >= 0; i--) {
             const prevMsg = claudeRequest.messages[i];
@@ -139,9 +139,18 @@ function claudeToGeminiRequest(claudeRequest) {
                 }
               }
             }
-            if (functionName !== block.tool_use_id) break;
+            if (functionName) break;
           }
-          
+
+          // If function name not found, this is a critical error
+          if (!functionName) {
+            console.error(`❌ CRITICAL: Could not find tool_use for tool_result`);
+            console.error(`   tool_use_id: ${block.tool_use_id}`);
+            console.error(`   This will cause Gemini to reject the request`);
+            // Use tool_use_id as last resort, but log the error
+            functionName = block.tool_use_id;
+          }
+
           // Prepare response object - MUST be an object, not array or primitive
           let response;
           if (typeof block.content === 'string') {
@@ -157,32 +166,32 @@ function claudeToGeminiRequest(claudeRequest) {
             console.warn(`⚠️  Unexpected tool_result content type: ${typeof block.content}`);
             response = { result: String(block.content) };
           }
-          
+
           // Handle error status
           if (block.is_error) {
             response.error = true;
-            response.error_message = typeof block.content === 'string' 
-              ? block.content 
+            response.error_message = typeof block.content === 'string'
+              ? block.content
               : JSON.stringify(block.content);
             console.warn(`⚠️  Tool execution failed: ${functionName} (${block.tool_use_id})`);
             console.warn(`   Error: ${response.error_message.substring(0, 200)}${response.error_message.length > 200 ? '...' : ''}`);
           }
-          
+
           parts.push({
             functionResponse: {
               name: functionName,
               response: response
             }
           });
-          
+
           // Log successful conversion
           if (!block.is_error) {
-            const contentSize = typeof block.content === 'string' 
-              ? block.content.length 
+            const contentSize = typeof block.content === 'string'
+              ? block.content.length
               : JSON.stringify(block.content).length;
             console.log(`🔧 Converted tool_result: ${block.tool_use_id} → ${functionName} (${contentSize} bytes)`);
           }
-          
+
           // Warn if function name wasn't found
           if (functionName === block.tool_use_id) {
             console.warn(`⚠️  Could not find function name for tool_use_id: ${block.tool_use_id}`);
@@ -232,14 +241,14 @@ function claudeToGeminiRequest(claudeRequest) {
     // Claude Code sometimes sends max_tokens: 1 which causes issues
     const minTokens = 100; // Minimum reasonable token count
     const defaultTokens = 4096; // Default if not specified or too small
-    
+
     let maxTokens = claudeRequest.max_tokens;
-    
+
     if (maxTokens < minTokens) {
       console.warn(`⚠️  max_tokens (${maxTokens}) is too small, using default (${defaultTokens})`);
       maxTokens = defaultTokens;
     }
-    
+
     geminiRequest.generationConfig.maxOutputTokens = maxTokens;
   } else {
     // If max_tokens not specified, use a reasonable default
@@ -258,6 +267,70 @@ function claudeToGeminiRequest(claudeRequest) {
     geminiRequest.generationConfig.stopSequences = claudeRequest.stop_sequences;
   }
 
+  // Handle structured output (JSON mode)
+  // Claude: response_format.type = "json_object"
+  // Gemini: responseMimeType = "application/json" + responseJsonSchema
+  if (claudeRequest.response_format) {
+    if (claudeRequest.response_format.type === 'json_object' ||
+      claudeRequest.response_format.type === 'json_schema') {
+      console.log('📋 Structured output requested');
+      geminiRequest.generationConfig.responseMimeType = 'application/json';
+
+      // If schema is provided, convert it to Gemini format
+      if (claudeRequest.response_format.schema) {
+        console.log('   Converting JSON schema for structured output');
+        const cleanedSchema = cleanJsonSchema(claudeRequest.response_format.schema);
+        geminiRequest.generationConfig.responseJsonSchema = cleanedSchema;
+
+        const schemaSize = JSON.stringify(cleanedSchema).length;
+        console.log(`   Schema size: ${schemaSize} bytes`);
+      } else {
+        console.log('   No schema provided, using free-form JSON');
+      }
+    }
+  }
+
+  // Handle tool_choice (force tool calling)
+  // Claude: tool_choice = { type: "auto" | "any" | "tool", name?: "..." }
+  // Gemini: tool_config.function_calling_config.mode = "AUTO" | "ANY" | "NONE"
+  if (claudeRequest.tool_choice) {
+    const modeMap = {
+      'auto': 'AUTO',
+      'any': 'ANY',
+      'tool': 'ANY',  // Claude's specific tool maps to Gemini's ANY
+      'none': 'NONE'
+    };
+
+    const mode = modeMap[claudeRequest.tool_choice.type] || 'AUTO';
+    geminiRequest.tool_config = {
+      function_calling_config: {
+        mode: mode
+      }
+    };
+
+    console.log(`🎯 Tool calling mode: ${claudeRequest.tool_choice.type} → ${mode}`);
+
+    if (claudeRequest.tool_choice.name) {
+      console.log(`   Specific tool requested: ${claudeRequest.tool_choice.name}`);
+      // Note: Gemini doesn't support forcing a specific tool by name
+      // We use ANY mode and rely on the model to choose correctly
+    }
+  }
+  if (claudeRequest.response_format) {
+    if (claudeRequest.response_format.type === 'json_object' && claudeRequest.response_format.schema) {
+      console.log('🎯 Adding structured output configuration (JSON schema)');
+      geminiRequest.generationConfig.responseMimeType = 'application/json';
+      geminiRequest.generationConfig.responseJsonSchema = claudeRequest.response_format.schema;
+      console.log(`  Schema size: ${JSON.stringify(claudeRequest.response_format.schema).length} bytes`);
+    } else if (claudeRequest.response_format.type === 'json_object') {
+      console.log('🎯 Adding structured output configuration (JSON without schema)');
+      geminiRequest.generationConfig.responseMimeType = 'application/json';
+      // Request JSON output without specific schema
+    } else {
+      console.warn(`⚠️  Unsupported response_format type: ${claudeRequest.response_format.type}`);
+    }
+  }
+
   // Helper function: Recursively clean JSON Schema fields that Gemini doesn't support
   function cleanJsonSchema(schema, depth = 0, path = '') {
     if (!schema || typeof schema !== 'object') {
@@ -266,15 +339,16 @@ function claudeToGeminiRequest(claudeRequest) {
 
     // Handle arrays - recurse into each element
     if (Array.isArray(schema)) {
-      return schema.map((item, index) => 
+      return schema.map((item, index) =>
         cleanJsonSchema(item, depth + 1, `${path}[${index}]`)
       );
     }
 
-    // Comprehensive list of JSON Schema fields that Gemini doesn't accept
+    // Comprehensive list of JSON Schema fields that Gemini doesn't support
+    // Based on official Gemini API documentation and testing
     const unsupportedFields = [
-      // JSON Schema metadata
-      'additionalProperties',
+      // JSON Schema metadata (confirmed unsupported)
+      'additionalProperties',  // ⚠️ CRITICAL: causes 400 error if present
       '$schema',
       '$id',
       '$ref',
@@ -282,46 +356,51 @@ function claudeToGeminiRequest(claudeRequest) {
       'title',
       'examples',
       'default',
-      
-      // Access control
+
+      // Access control (confirmed unsupported)
       'readOnly',
       'writeOnly',
-      
-      // Numeric constraints
-      'exclusiveMinimum',
-      'exclusiveMaximum',
+
+      // Numeric constraints (confirmed unsupported)
       'minimum',
       'maximum',
+      'exclusiveMinimum',
+      'exclusiveMaximum',
       'multipleOf',
-      
-      // String constraints
-      'pattern',
-      'format',
+
+      // String constraints (confirmed unsupported)
       'minLength',
       'maxLength',
-      
-      // Array constraints
+      'pattern',
+      'format',
+
+      // Array constraints (confirmed unsupported)
       'minItems',
       'maxItems',
       'uniqueItems',
-      
-      // Object constraints
+
+      // Object constraints (confirmed unsupported)
       'minProperties',
       'maxProperties',
       'patternProperties',
       'dependencies',
-      
-      // Content-related
+
+      // Content-related (confirmed unsupported)
       'contentMediaType',
       'contentEncoding',
-      
-      // Additional constraints
-      'const',
+
+      // Complex schema compositions (confirmed unsupported)
       'allOf',
       'anyOf',
       'oneOf',
-      'not'
+      'not',
+      'const'
     ];
+
+    // Note: Gemini DOES support these fields (we keep them):
+    // - type, properties, required, description
+    // - enum (for enumerated values)
+    // - items (for arrays)
 
     // Create a clean copy
     const cleaned = {};
@@ -351,13 +430,13 @@ function claudeToGeminiRequest(claudeRequest) {
       const validProperties = Object.keys(cleaned.properties);
       const originalRequired = cleaned.required;
       cleaned.required = cleaned.required.filter(prop => validProperties.includes(prop));
-      
+
       // Log if we removed any required properties
       if (cleaned.required.length < originalRequired.length) {
         const removed = originalRequired.filter(prop => !cleaned.required.includes(prop));
         console.log(`🧹 Cleaned 'required' array: removed ${removed.length} reference(s) to deleted properties: ${removed.join(', ')}`);
       }
-      
+
       // Remove empty required array
       if (cleaned.required.length === 0) {
         delete cleaned.required;
@@ -383,9 +462,9 @@ function claudeToGeminiRequest(claudeRequest) {
       return true;
     }
 
-    // Must match the list in cleanJsonSchema
+    // Must match the list in cleanJsonSchema exactly
     const unsupportedFields = [
-      'additionalProperties',
+      'additionalProperties',  // ⚠️ CRITICAL
       '$schema',
       '$id',
       '$ref',
@@ -395,15 +474,15 @@ function claudeToGeminiRequest(claudeRequest) {
       'default',
       'readOnly',
       'writeOnly',
-      'exclusiveMinimum',
-      'exclusiveMaximum',
       'minimum',
       'maximum',
+      'exclusiveMinimum',
+      'exclusiveMaximum',
       'multipleOf',
-      'pattern',
-      'format',
       'minLength',
       'maxLength',
+      'pattern',
+      'format',
       'minItems',
       'maxItems',
       'uniqueItems',
@@ -413,11 +492,11 @@ function claudeToGeminiRequest(claudeRequest) {
       'dependencies',
       'contentMediaType',
       'contentEncoding',
-      'const',
       'allOf',
       'anyOf',
       'oneOf',
-      'not'
+      'not',
+      'const'
     ];
 
     // Deep search for unsupported fields
@@ -479,7 +558,7 @@ function claudeToGeminiRequest(claudeRequest) {
 
   // Check if the request contains any functionResponse (tool_result)
   // Gemini doesn't allow tools definition when functionResponse is present
-  const hasFunctionResponse = geminiRequest.contents.some(content => 
+  const hasFunctionResponse = geminiRequest.contents.some(content =>
     content.parts && content.parts.some(part => part.functionResponse)
   );
 
@@ -547,7 +626,7 @@ function claudeToGeminiRequest(claudeRequest) {
 
     if (functionDeclarations.length > 0) {
       geminiRequest.tools = [{
-        functionDeclarations: functionDeclarations
+        function_declarations: functionDeclarations  // Gemini uses snake_case
       }];
     }
   }
@@ -729,7 +808,7 @@ class ClaudeStreamConverter {
           }
         });
       }
-      
+
       // Handle function call (tool use)
       else if (part.functionCall) {
         // Send content_block_start for tool_use

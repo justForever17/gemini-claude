@@ -398,42 +398,95 @@ app.post('/v1/messages', requireApiKey(config), async (req, res) => {
         const error = await response.text();
         console.error(`❌ Gemini API 错误 [${response.status}]:`, error);
         
-        // 如果是 500 错误且有工具定义，记录详细信息以便调试
-        if (response.status === 500 && geminiRequest.tools) {
-          console.error('🔍 Request contained tools - dumping for debugging:');
-          console.error('   Tool count:', geminiRequest.tools[0]?.function_declarations?.length || 0);
+        // Map Gemini error codes to Claude error types
+        const errorMap = {
+          400: {
+            type: 'invalid_request_error',
+            message: 'Invalid request parameters',
+            hint: 'Check tool definitions and request format'
+          },
+          401: {
+            type: 'authentication_error',
+            message: 'Invalid API key',
+            hint: 'Verify your Gemini API key is correct'
+          },
+          403: {
+            type: 'permission_error',
+            message: 'Permission denied',
+            hint: 'Check API key permissions'
+          },
+          429: {
+            type: 'rate_limit_error',
+            message: 'API rate limit exceeded',
+            hint: 'Reduce request frequency or upgrade quota'
+          },
+          500: {
+            type: 'api_error',
+            message: 'Gemini API internal error',
+            hint: 'This is a Gemini server issue, try again later'
+          },
+          503: {
+            type: 'overloaded_error',
+            message: 'Gemini API temporarily unavailable',
+            hint: 'Service is overloaded, retry with exponential backoff'
+          }
+        };
+        
+        const mapped = errorMap[response.status] || {
+          type: 'api_error',
+          message: 'Unknown Gemini API error',
+          hint: 'Check Gemini API status'
+        };
+        
+        // Enhanced debugging for tool-related errors
+        if ((response.status === 400 || response.status === 500) && geminiRequest.tools) {
+          console.error('🔍 Request contained tools - debugging information:');
+          console.error(`   Tool count: ${geminiRequest.tools[0]?.function_declarations?.length || 0}`);
           
-          // 记录每个工具的名称和参数结构
+          // Check for common issues
+          const hasFunctionResponse = geminiRequest.contents.some(content => 
+            content.parts && content.parts.some(part => part.functionResponse)
+          );
+          
+          if (hasFunctionResponse) {
+            console.error('   ⚠️  Request contains functionResponse');
+            console.error('   This should NOT have tools definition (Gemini limitation)');
+          }
+          
+          // Check each tool for suspicious fields
           if (geminiRequest.tools[0]?.function_declarations) {
             geminiRequest.tools[0].function_declarations.forEach((tool, idx) => {
               console.error(`   [${idx}] ${tool.name}:`);
               console.error(`       Parameters keys: ${Object.keys(tool.parameters || {}).join(', ')}`);
               
-              // 检查是否还有不支持的字段
               const paramStr = JSON.stringify(tool.parameters);
               const suspiciousFields = [
                 'additionalProperties', '$schema', 'format', 'pattern',
-                'minLength', 'maxLength', 'minItems', 'maxItems'
+                'minLength', 'maxLength', 'minItems', 'maxItems',
+                'minimum', 'maximum'
               ];
               const found = suspiciousFields.filter(field => paramStr.includes(`"${field}"`));
               if (found.length > 0) {
-                console.error(`       ⚠️  Suspicious fields found: ${found.join(', ')}`);
+                console.error(`       ⚠️  Unsupported fields found: ${found.join(', ')}`);
+                console.error(`       These fields should have been removed!`);
               }
             });
           }
           
-          // 如果工具数量较少，记录完整的工具定义
+          // For small tool sets, dump full definition
           if (geminiRequest.tools[0]?.function_declarations?.length <= 3) {
             console.error('   Full tools definition:');
             console.error(JSON.stringify(geminiRequest.tools, null, 2));
           }
         }
         
+        // Return Claude-compatible error
         return res.status(502).json({
           error: { 
-            type: 'upstream_error', 
-            message: 'Gemini API request failed',
-            details: error
+            type: mapped.type,
+            message: mapped.message,
+            details: error,
+            hint: mapped.hint
           }
         });
       }
